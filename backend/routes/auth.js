@@ -3,19 +3,14 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const supabase = require('../config/supabase');
+const asyncHandler = require('../utils/asyncHandler');
+const { validate, loginSchema, changePasswordSchema } = require('../utils/validators');
+const { authenticate } = require('../middleware/auth');
 const router = express.Router();
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-
-  // Step 1 — Validate input
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
-  }
-  if (password.trim() === '') {
-    return res.status(400).json({ error: 'Password cannot be empty' });
-  }
+router.post('/login', validate(loginSchema), asyncHandler(async (req, res) => {
+  const { email, password } = req.validatedBody;
 
   // Step 2 — Find user by email
   const { data: user, error } = await supabase
@@ -61,39 +56,41 @@ router.post('/login', async (req, res) => {
       avatar: user.avatar_url
     }
   });
-});
+}));
 
 // POST /api/auth/logout
 router.post('/logout', (req, res) => res.json({ message: 'Logged out successfully' }));
 
-// POST /api/auth/change-password (logged in users change their own password)
-router.post('/change-password', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Not authenticated' });
-
-  const { current_password, new_password } = req.body;
-  if (!current_password || !new_password) {
-    return res.status(400).json({ error: 'Both current and new password are required' });
+// GET /api/auth/me (verify current token & return user info)
+router.get('/me', authenticate, (req, res) => {
+  if (!req.user || !req.user.roles) {
+    return res.status(401).json({ error: 'Invalid user session' });
   }
-  if (new_password.length < 6) {
-    return res.status(400).json({ error: 'New password must be at least 6 characters' });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const { data: user } = await supabase.from('users').select('*').eq('id', decoded.userId).single();
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
-    const isValid = await bcrypt.compare(current_password, user.password_hash);
-    if (!isValid) return res.status(401).json({ error: 'Current password is incorrect' });
-
-    const new_hash = await bcrypt.hash(new_password, 12);
-    await supabase.from('users').update({ password_hash: new_hash }).eq('id', decoded.userId);
-
-    res.json({ message: 'Password changed successfully' });
-  } catch {
-    return res.status(401).json({ error: 'Invalid or expired token' });
-  }
+  res.json({
+    id: req.user.id,
+    name: req.user.full_name,
+    email: req.user.email,
+    role: req.user.roles.name,
+    avatar: req.user.avatar_url
+  });
 });
 
+// POST /api/auth/change-password (logged in users change their own password)
+router.post('/change-password', authenticate, validate(changePasswordSchema), asyncHandler(async (req, res) => {
+  const { current_password, new_password } = req.validatedBody;
+  const userId = req.user.id;
+
+  const { data: user } = await supabase.from('users').select('*').eq('id', userId).single();
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const isValid = await bcrypt.compare(current_password, user.password_hash);
+  if (!isValid) return res.status(401).json({ error: 'Current password is incorrect' });
+
+  const new_hash = await bcrypt.hash(new_password, 12);
+  await supabase.from('users').update({ password_hash: new_hash }).eq('id', userId);
+
+  res.json({ message: 'Password changed successfully' });
+}));
+
 module.exports = router;
+

@@ -40,6 +40,7 @@ app.use('/api/users',       require('./routes/users'));
 app.use('/api/activity',    require('./routes/activity'));
 app.use('/api/tickets',     require('./routes/tickets'));
 app.use('/api/contracts',   require('./routes/contracts'));
+app.use('/api/onboarding',  require('./routes/onboarding'));
 
 // ─── Health Check ──────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date() }));

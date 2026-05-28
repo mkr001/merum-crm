@@ -2,12 +2,14 @@
 const express = require('express');
 const supabase = require('../config/supabase');
 const { authenticate, authorize } = require('../middleware/auth');
+const asyncHandler = require('../utils/asyncHandler');
+const { validate, invoiceCreateSchema } = require('../utils/validators');
 const router = express.Router();
 router.use(authenticate);
 
 // JS invoice number generation removed; handled by PostgreSQL default sequence.
 
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const { status, client_id, startDate, endDate, page = 1, limit = 50 } = req.query;
   let q = supabase.from('invoices').select('*, clients(org_name), invoice_items(*)', { count: 'exact' });
   if (status) q = q.eq('status', status);
@@ -21,16 +23,16 @@ router.get('/', async (req, res) => {
   const { data, error, count } = await q;
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data, total: count });
-});
+}));
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', asyncHandler(async (req, res) => {
   const { data, error } = await supabase.from('invoices')
     .select('*, clients(*), invoice_items(*, services(name))').eq('id', req.params.id).single();
   if (error) return res.status(404).json({ error: 'Not found' });
   res.json(data);
-});
+}));
 
-router.post('/bulk', authorize('admin', 'manager', 'accountant'), async (req, res) => {
+router.post('/bulk', authorize('admin', 'manager', 'accountant'), asyncHandler(async (req, res) => {
   try {
     const { invoices } = req.body;
     if (!Array.isArray(invoices)) return res.status(400).json({ error: 'Invalid payload' });
@@ -141,10 +143,10 @@ router.post('/bulk', authorize('admin', 'manager', 'accountant'), async (req, re
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
-});
+}));
 
-router.post('/', authorize('admin', 'manager', 'accountant'), async (req, res) => {
-  const { items = [], ...invoice } = req.body;
+router.post('/', authorize('admin', 'manager', 'accountant'), validate(invoiceCreateSchema), asyncHandler(async (req, res) => {
+  const { items = [], ...invoice } = req.validatedBody;
   const subtotal = items.reduce((s, i) => s + (i.quantity * i.unit_price), 0);
   const tax_amount = subtotal * (invoice.tax_rate || 18) / 100;
   const total_amount = subtotal + tax_amount;
@@ -165,21 +167,33 @@ router.post('/', authorize('admin', 'manager', 'accountant'), async (req, res) =
       unit_price: i.unit_price,
       line_total: i.quantity * i.unit_price
     }));
-    await supabase.from('invoice_items').insert(lineItems);
+    const { error: itemsError } = await supabase.from('invoice_items').insert(lineItems);
+    if (itemsError) return res.status(500).json({ error: `Invoice created but items failed: ${itemsError.message}` });
   }
 
   res.status(201).json(inv);
-});
+}));
 
-router.patch('/:id', authorize('admin', 'manager', 'accountant'), async (req, res) => {
+router.patch('/:id', authorize('admin', 'manager', 'accountant'), asyncHandler(async (req, res) => {
+  const allowedFields = ['status', 'issue_date', 'due_date', 'tax_rate', 'payment_method', 'payment_reference', 'notes'];
+  const updates = {};
+
+  for (const field of allowedFields) {
+    if (field in req.body) {
+      updates[field] = req.body[field];
+    }
+  }
+
+  updates.updated_at = new Date();
+
   const { data, error } = await supabase.from('invoices')
-    .update({ ...req.body, updated_at: new Date() }).eq('id', req.params.id).select().single();
+    .update(updates).eq('id', req.params.id).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
-});
+}));
 
 // DELETE /api/invoices/:id (admin, manager, accountant only)
-router.delete('/:id', authorize('admin', 'manager', 'accountant'), async (req, res) => {
+router.delete('/:id', authorize('admin', 'manager', 'accountant'), asyncHandler(async (req, res) => {
   // Supabase table rules handles cascade deletion of invoice_items due to foreign keys, 
   // but we can manually clean invoice_items first to be safe.
   await supabase.from('invoice_items').delete().eq('invoice_id', req.params.id);
@@ -191,9 +205,9 @@ router.delete('/:id', authorize('admin', 'manager', 'accountant'), async (req, r
 
   if (error) return res.status(500).json({ error: error.message });
   res.json({ message: 'Invoice deleted successfully', data });
-});
+}));
 
-router.post('/delete-batch', authorize('admin', 'manager', 'accountant'), async (req, res) => {
+router.post('/delete-batch', authorize('admin', 'manager', 'accountant'), asyncHandler(async (req, res) => {
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Invalid IDs' });
 
@@ -206,6 +220,7 @@ router.post('/delete-batch', authorize('admin', 'manager', 'accountant'), async 
 
   if (error) return res.status(500).json({ error: error.message });
   res.json({ message: 'Invoices deleted successfully', count: ids.length });
-});
+}));
 
 module.exports = router;
+

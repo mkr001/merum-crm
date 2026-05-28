@@ -356,3 +356,42 @@ INSERT INTO services (name, category, billing_type, base_price) VALUES
 ('Technology & Process Automation','Advisory', 'one_time',  50000),
 ('FCRA Compliance',                'BOSS',     'quarterly',  12000),
 ('CSR Compliance',                 'BOSS',     'quarterly',   8000);
+
+-- ============================================================
+-- 16. CLIENT ONBOARDING FLOW
+-- ============================================================
+CREATE TABLE client_onboardings (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  lead_id UUID REFERENCES leads(id) ON DELETE SET NULL,
+  status VARCHAR(50) DEFAULT 'Pending', -- Pending, Documents Pending, Verification In Progress, Approved, Rejected, Active Client
+  company_name VARCHAR(200) NOT NULL,
+  entity_type VARCHAR(100),
+  incorporation_date DATE,
+  cin_llpin VARCHAR(50),
+  pan VARCHAR(20),
+  gstin VARCHAR(20),
+  registered_address TEXT,
+  communication_address TEXT,
+  primary_contact VARCHAR(150),
+  designation VARCHAR(100),
+  mobile VARCHAR(20),
+  email VARCHAR(150),
+  nature_of_business TEXT,
+  industry_type VARCHAR(100),
+  turnover NUMERIC(15,2),
+  required_services JSONB DEFAULT '[]',
+  compliance_status JSONB DEFAULT '[]',
+  documents JSONB DEFAULT '{}',
+  authorized_signatory VARCHAR(150),
+  signature_name VARCHAR(150),
+  designation_auth VARCHAR(100),
+  auth_date DATE,
+  client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
+  client_uid VARCHAR(50) UNIQUE,
+  agreement_overrides JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_onboarding_status ON client_onboardings(status);
+

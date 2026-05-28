@@ -1,7 +1,36 @@
+# Dependencies
 node_modules/
-.cache/
-dist/
-build/
-.env
 frontend/node_modules/
 backend/node_modules/
+
+# Environment variables — NEVER commit secrets
+.env
+.env.local
+.env.production
+.env.staging
+backend/.env
+frontend/.env
+
+# Build output
+dist/
+build/
+.cache/
+
+# Uploads (user data)
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

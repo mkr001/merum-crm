@@ -18,23 +18,10 @@ const STANDARD_ONBOARDING_TASKS = [
  * @param {string[]} interestServices - Array of service names from the lead.
  */
 async function initializeOnboarding(clientId, userId, interestServices = []) {
-  // 1. Create Standard Tasks
-  const tasksToInsert = STANDARD_ONBOARDING_TASKS.map(task => ({
-    ...task,
-    related_to: 'client',
-    related_id: clientId,
-    assigned_to: userId, // Default assign to the creator
-    created_by: userId,
-    task_type: 'onboarding',
-    status: 'open'
-  }));
-
   const { error: taskErr } = await supabase.from('tasks').insert(tasksToInsert);
-  if (taskErr) console.error('Error creating onboarding tasks:', taskErr);
+  if (taskErr) throw new Error(`Failed to create onboarding tasks: ${taskErr.message}`);
 
-  // 2. Automated Service Assignment
   if (interestServices && interestServices.length > 0) {
-    // Look up services by name
     const { data: services } = await supabase.from('services')
       .select('id, name')
       .in('name', interestServices);
@@ -49,7 +36,7 @@ async function initializeOnboarding(clientId, userId, interestServices = []) {
       }));
 
       const { error: serviceErr } = await supabase.from('client_services').insert(clientServicesToInsert);
-      if (serviceErr) console.error('Error auto-assigning services:', serviceErr);
+      if (serviceErr) throw new Error(`Failed to assign services: ${serviceErr.message}`);
     }
   }
 }

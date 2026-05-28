@@ -14,6 +14,7 @@ import {
 const ALL_NAV = [
   { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard',  roles: ['admin','manager','accountant','sales','viewer'] },
   { to: '/leads',      icon: UserCheck,        label: 'Leads',      roles: ['admin','manager','sales'] },
+  { to: '/onboarding', icon: FileSignature,    label: 'Client Onboarding', roles: ['admin','manager','sales'] },
   { to: '/clients',    icon: Building2,        label: 'Clients',    roles: ['admin','manager','accountant','sales','viewer'] },
   { to: '/contacts',   icon: Contact,          label: 'Contacts',   roles: ['admin','manager','accountant','sales','viewer'] },
   { to: '/tasks',      icon: CheckSquare,      label: 'Tasks',      roles: ['admin','manager','accountant','sales'] },

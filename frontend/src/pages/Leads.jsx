@@ -1,6 +1,7 @@
 // src/pages/Leads.jsx
 import { useEffect, useState } from 'react';
 import { Plus, Search, Filter, ChevronRight, Phone, Mail, ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 
@@ -144,6 +145,7 @@ export default function Leads() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [modal, setModal] = useState(null); // null | 'new' | lead object
+  const navigate = useNavigate();
 
   const fetchLeads = async () => {
     setLoading(true);
@@ -163,13 +165,8 @@ export default function Leads() {
     fetchLeads();
   };
 
-  const handleConvert = async (lead) => {
-    if (!window.confirm(`Convert "${lead.org_name}" to a client?`)) return;
-    try {
-      await api.patch(`/leads/${lead.id}/convert`);
-      toast.success('Lead converted to client!');
-      fetchLeads();
-    } catch {}
+  const handleConvert = (lead) => {
+    navigate(`/onboarding/new?lead_id=${lead.id}`);
   };
 
   const filtered = leads.filter(l =>

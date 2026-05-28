@@ -3,10 +3,12 @@ const express = require('express');
 const supabase = require('../config/supabase');
 const { authenticate, authorize } = require('../middleware/auth');
 const { initializeOnboarding } = require('../utils/onboarding');
+const asyncHandler = require('../utils/asyncHandler');
+const { validate, clientCreateSchema, clientUpdateSchema } = require('../utils/validators');
 const router = express.Router();
 router.use(authenticate);
 
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const { status, page = 1, limit = 50 } = req.query;
   
   // 1. Fetch clients with account manager name
@@ -27,43 +29,19 @@ router.get('/', async (req, res) => {
   const { data: clients, error, count } = await q;
   if (error) return res.status(500).json({ error: error.message });
 
-  if (!clients || clients.length === 0) {
-    return res.json({ data: [], total: count, page: +page, limit: +limit });
-  }
+  res.json({ data: clients || [], total: count || 0, page: +page, limit: +limit });
+}));
 
-  // 2. Fetch onboarding tasks for these clients to calculate progress
-  const clientIds = clients.map(c => c.id);
-  const { data: allTasks, error: taskErr } = await supabase.from('tasks')
-    .select('id, related_id, status, task_type')
-    .eq('related_to', 'client')
-    .in('related_id', clientIds)
-    .eq('task_type', 'onboarding');
-
-  if (taskErr) return res.status(500).json({ error: taskErr.message });
-
-  // 3. Calculate onboarding progress for each client
-  const processedData = clients.map(client => {
-    const tasks = allTasks.filter(t => t.related_id === client.id);
-    const total = tasks.length;
-    const completed = tasks.filter(t => t.status === 'completed').length;
-    const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
-    
-    return { ...client, onboarding_progress: progress, onboarding_total: total };
-  });
-
-  res.json({ data: processedData, total: count, page: +page, limit: +limit });
-});
-
-router.get('/:id', async (req, res) => {
+router.get('/:id', asyncHandler(async (req, res) => {
   const { data, error } = await supabase.from('clients')
     .select('*, users!clients_account_manager_id_fkey(full_name, email), contacts(*), client_services(*, services(*), users!client_services_assigned_team_member_fkey(full_name))')
     .eq('id', req.params.id).single();
   if (error) return res.status(404).json({ error: 'Client not found' });
   res.json(data);
-});
+}));
 
 // Bulk-insert clients from Excel/CSV upload (admin/manager only)
-router.post('/bulk', authorize('admin', 'manager'), async (req, res) => {
+router.post('/bulk', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
   const { clients } = req.body; // array of client objects
   if (!Array.isArray(clients) || clients.length === 0)
     return res.status(400).json({ error: 'Send a non-empty "clients" array.' });
@@ -116,10 +94,10 @@ router.post('/bulk', authorize('admin', 'manager'), async (req, res) => {
     skipped_details: results.skipped,
     data: results.inserted,
   });
-});
+}));
 
-router.post('/', authorize('admin', 'manager'), async (req, res) => {
-  const { data, error } = await supabase.from('clients').insert([req.body]).select().single();
+router.post('/', authorize('admin', 'manager'), validate(clientCreateSchema), asyncHandler(async (req, res) => {
+  const { data, error } = await supabase.from('clients').insert([req.validatedBody]).select().single();
   if (error) return res.status(500).json({ error: error.message });
   
   // Initialize onboarding tasks
@@ -127,17 +105,17 @@ router.post('/', authorize('admin', 'manager'), async (req, res) => {
 
   await supabase.from('activity_log').insert([{ performed_by: req.user.id, entity_type: 'client', entity_id: data.id, action: 'created' }]);
   res.status(201).json(data);
-});
+}));
 
-router.patch('/:id', authorize('admin', 'manager', 'accountant'), async (req, res) => {
-  const { data, error } = await supabase.from('clients').update({ ...req.body, updated_at: new Date() }).eq('id', req.params.id).select().single();
+router.patch('/:id', authorize('admin', 'manager', 'accountant'), validate(clientUpdateSchema), asyncHandler(async (req, res) => {
+  const { data, error } = await supabase.from('clients').update({ ...req.validatedBody, updated_at: new Date() }).eq('id', req.params.id).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
-});
+}));
 
 // Offboard a client (admin/manager only)
 // Sets status to 'churned' and cancels all active services
-router.post('/:id/offboard', authorize('admin', 'manager'), async (req, res) => {
+router.post('/:id/offboard', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
 
@@ -180,10 +158,10 @@ router.post('/:id/offboard', authorize('admin', 'manager'), async (req, res) => 
   }]);
 
   res.json({ message: `Client "${client.org_name}" has been offboarded.` });
-});
+}));
 
 // Soft-delete a client (admin only)
-router.delete('/:id', authorize('admin'), async (req, res) => {
+router.delete('/:id', authorize('admin'), asyncHandler(async (req, res) => {
   const { data: existing, error: fetchErr } = await supabase.from('clients').select('id, org_name, status').eq('id', req.params.id).single();
   if (fetchErr || !existing) return res.status(404).json({ error: 'Client not found' });
   if (existing.status === 'deleted') return res.status(400).json({ error: 'Client is already deleted' });
@@ -204,6 +182,7 @@ router.delete('/:id', authorize('admin'), async (req, res) => {
   }]);
 
   res.json({ message: 'Client deleted successfully', data });
-});
+}));
 
 module.exports = router;
+

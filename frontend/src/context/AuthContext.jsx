@@ -9,13 +9,27 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('merum_token');
-    const savedUser = localStorage.getItem('merum_user');
-    if (token && savedUser) {
-      setUser(JSON.parse(savedUser));
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    }
-    setLoading(false);
+    const verifySession = async () => {
+      const token = localStorage.getItem('merum_token');
+      const savedUser = localStorage.getItem('merum_user');
+      if (token && savedUser) {
+        try {
+          api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+          const { data } = await api.get('/auth/me');
+          setUser(data);
+          localStorage.setItem('merum_user', JSON.stringify(data));
+        } catch (err) {
+          console.error('Session verification failed:', err);
+          localStorage.removeItem('merum_token');
+          localStorage.removeItem('merum_user');
+          delete api.defaults.headers.common['Authorization'];
+          setUser(null);
+        }
+      }
+      setLoading(false);
+    };
+
+    verifySession();
   }, []);
 
   const login = async (email, password) => {

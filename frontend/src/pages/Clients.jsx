@@ -245,13 +245,8 @@ export default function Clients() {
           <p style={{ margin: '3px 0 0', fontSize: 13, color: '#888' }}>{clients.length} {viewTab === 'deleted' ? 'deleted' : 'total'} clients</p>
         </div>
         {viewTab === 'active' && (
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => setModal('bulk')} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', background: '#f5f5f5', color: '#333', border: '1px solid #ddd', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              <Upload size={16} /> Bulk Upload
-            </button>
-            <button onClick={() => setModal('new')} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', background: '#2d9d78', color: '#fff', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              <Plus size={16} /> Add Client
-            </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: '#666' }}>
+            <span>To add new clients, please convert a lead in the <b>Leads</b> module.</span>
           </div>
         )}
       </div>

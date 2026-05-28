@@ -43,19 +43,31 @@ const runCron = () => {
         .not('assigned_to', 'is', null);
 
       if (overdueTasks && overdueTasks.length > 0) {
-        // Find existing notifications so we don't spam every single day? 
-        // For now, just generate one if they are overdue and no notifs today?
-        // Let's just create a notification for them.
-        const notifications = overdueTasks.map(t => ({
-          user_id: t.assigned_to,
-          title: 'Task Overdue',
-          message: `Task "${t.title}" was due on ${new Date(t.due_date).toLocaleDateString()}.`,
-          type: 'task_due',
-          entity_type: 'tasks',
-          entity_id: t.id
-        }));
-        await supabase.from('notifications').insert(notifications);
+        // Fetch existing task_due notifications to avoid duplicates
+        const taskIds = overdueTasks.map(t => t.id);
+        const { data: existingNotifs } = await supabase
+          .from('notifications')
+          .select('entity_id')
+          .eq('type', 'task_due')
+          .eq('entity_type', 'tasks')
+          .in('entity_id', taskIds);
+
+        const notifiedTaskIds = new Set((existingNotifs || []).map(n => n.entity_id));
+        const newOverdueTasks = overdueTasks.filter(t => !notifiedTaskIds.has(t.id));
+
+        if (newOverdueTasks.length > 0) {
+          const notifications = newOverdueTasks.map(t => ({
+            user_id: t.assigned_to,
+            title: 'Task Overdue',
+            message: `Task "${t.title}" was due on ${new Date(t.due_date).toLocaleDateString()}.`,
+            type: 'task_due',
+            entity_type: 'tasks',
+            entity_id: t.id
+          }));
+          await supabase.from('notifications').insert(notifications);
+        }
       }
+
 
       console.log('Daily notification job completed.');
     } catch (err) {
