@@ -47,6 +47,7 @@ export default function OnboardingForm() {
   const [activeTab, setActiveTab] = useState('A');
   const [loading, setLoading] = useState(false);
   const [timeline, setTimeline] = useState([]);
+  const [showApproveModal, setShowApproveModal] = useState(false);
   
   const [form, setForm] = useState({
     company_name: '',
@@ -152,6 +153,12 @@ export default function OnboardingForm() {
       } else {
         const { data } = await api.post('/onboarding', form);
         toast.success('Onboarding initialized!');
+        if (data.clientCredentials) {
+          window.prompt(
+            `Client Portal Account Created!\n\nPlease copy and share these credentials with the client so they can log in:\n\nEmail: ${data.clientCredentials.email}\nPassword: ${data.clientCredentials.password}`,
+            `Email: ${data.clientCredentials.email} | Password: ${data.clientCredentials.password}`
+          );
+        }
         navigate(`/onboarding/${data.id}`);
       }
     } catch (err) {
@@ -159,19 +166,28 @@ export default function OnboardingForm() {
     }
   };
 
-  const handleApprove = async () => {
+  const handleApprove = () => {
     const missingDocs = DOCUMENT_CHECKLIST.filter(doc => !(form.documents?.[doc.key]?.uploaded));
-    let msg = `Are you sure you want to approve "${form.company_name}" and activate their profile?`;
     if (missingDocs.length > 0) {
-      msg = `⚠️ Warning: ${missingDocs.length} required document(s) are missing.\n\nAre you sure you want to approve "${form.company_name}" and activate their profile anyway?`;
+      if (!window.confirm(`⚠️ Warning: ${missingDocs.length} required document(s) are missing.\n\nDo you want to proceed with approval anyway?`)) return;
     }
-    if (!window.confirm(msg)) return;
+    setShowApproveModal(true);
+  };
+
+  const executeApproval = async (sendAgreement) => {
     try {
-      await api.post(`/onboarding/${id}/approve`);
-      toast.success('Onboarding approved and client profile created!');
-      navigate('/onboarding');
+      await api.post(`/onboarding/${id}/approve`, { send_agreement: sendAgreement });
+      setShowApproveModal(false);
+      
+      if (sendAgreement) {
+        toast.success('Client activated and Agreement emailed!');
+        navigate('/onboarding');
+      } else {
+        toast.success('Moved to Pending Agreement Review');
+        navigate(`/onboarding/${id}/agreement`);
+      }
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to approve onboarding');
+      toast.error(err.response?.data?.error || 'Failed to process approval');
     }
   };
 
@@ -234,9 +250,11 @@ export default function OnboardingForm() {
   return (
     <div>
       {/* Back link */}
-      <button onClick={() => navigate('/onboarding')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', color: '#666', cursor: 'pointer', marginBottom: 15, fontSize: 13, fontWeight: 500 }}>
-        <ArrowLeft size={16} /> Back to Onboarding List
-      </button>
+      {user?.role !== 'client' && (
+        <button onClick={() => navigate('/onboarding')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', color: '#666', cursor: 'pointer', marginBottom: 15, fontSize: 13, fontWeight: 500 }}>
+          <ArrowLeft size={16} /> Back to Onboarding List
+        </button>
+      )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>
@@ -251,7 +269,7 @@ export default function OnboardingForm() {
           <button onClick={handleSave} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: '#f5f5f5', border: '1px solid #ddd', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#333' }}>
             <Save size={16} /> Save Progress
           </button>
-          {id && id !== 'new' && (
+          {id && id !== 'new' && user?.role !== 'client' && (
             <button
               onClick={() => navigate(`/onboarding/${id}/agreement`)}
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: 'linear-gradient(135deg, #534ab7, #3b2d9e)', color: '#fff', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
@@ -262,7 +280,7 @@ export default function OnboardingForm() {
           {isApprover && id && id !== 'new' && form.status !== 'Active Client' && form.status !== 'Rejected' && (
             <>
               <button onClick={handleApprove} style={{ padding: '10px 20px', background: '#2d9d78', color: '#fff', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                Approve & Activate
+                Approve Workflow
               </button>
               <button onClick={handleReject} style={{ padding: '10px 20px', background: '#e24b4a', color: '#fff', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                 Reject
@@ -626,6 +644,41 @@ export default function OnboardingForm() {
           </div>
         </div>
       </div>
+
+      {/* Approval Modal */}
+      {showApproveModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
+          <div style={{ background: '#fff', padding: 24, borderRadius: 12, width: 450, boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
+            <h3 style={{ margin: '0 0 10px', fontSize: 18, color: '#1a1a18' }}>Approval & Agreement Options</h3>
+            <p style={{ margin: '0 0 20px', fontSize: 13, color: '#555', lineHeight: 1.5 }}>
+              You are about to approve <b>{form.company_name}</b>. How would you like to handle their Service Agreement?
+            </p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <button 
+                onClick={() => executeApproval(false)}
+                style={{ padding: '14px', background: '#f5f5f5', border: '1px solid #ddd', borderRadius: 8, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column' }}
+              >
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#333' }}>1. Review & Edit Agreement First</span>
+                <span style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Generate the agreement, but let me review and edit clauses before sending it to the client.</span>
+              </button>
+
+              <button 
+                onClick={() => executeApproval(true)}
+                style={{ padding: '14px', background: '#e1f5ee', border: '1px solid #2d9d78', borderRadius: 8, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column' }}
+              >
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#0f6e56' }}>2. Approve & Send Agreement Immediately</span>
+                <span style={{ fontSize: 12, color: '#2d9d78', marginTop: 4 }}>Activate the client profile immediately and email them the default Service Agreement to sign.</span>
+              </button>
+            </div>
+
+            <div style={{ marginTop: 20, textAlign: 'right' }}>
+              <button onClick={() => setShowApproveModal(false)} style={{ padding: '8px 16px', background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

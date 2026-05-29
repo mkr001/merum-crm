@@ -9,7 +9,14 @@ router.use(authenticate);
 
 // List tickets
 router.get('/', asyncHandler(async (req, res) => {
-  const { status, client_id, priority, assigned_to, page = 1, limit = 50 } = req.query;
+  let { status, client_id, priority, assigned_to, page = 1, limit = 50 } = req.query;
+
+  // Client users can only see their own tickets
+  if (req.user.roles?.name === 'client') {
+    if (!req.user.client_id) return res.json({ data: [], total: 0 });
+    client_id = req.user.client_id;
+  }
+
   let q = supabase.from('support_tickets')
     .select('*, clients(org_name), raised:users!support_tickets_raised_by_fkey(full_name), assignee:users!support_tickets_assigned_to_fkey(full_name)', { count: 'exact' });
   if (status) q = q.eq('status', status);
@@ -29,13 +36,28 @@ router.get('/:id', asyncHandler(async (req, res) => {
     .select('*, clients(org_name), raised:users!support_tickets_raised_by_fkey(full_name), assignee:users!support_tickets_assigned_to_fkey(full_name)')
     .eq('id', req.params.id).single();
   if (error) return res.status(404).json({ error: 'Not found' });
+  // Client can only view their own tickets
+  if (req.user.roles?.name === 'client' && data.client_id !== req.user.client_id) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
   res.json(data);
 }));
 
 // Create ticket
-router.post('/', validate(ticketCreateSchema), asyncHandler(async (req, res) => {
+router.post('/', (req, res, next) => {
+  if (req.user.roles?.name === 'client' && req.user.client_id) {
+    req.body.client_id = req.user.client_id;
+  }
+  next();
+}, validate(ticketCreateSchema), asyncHandler(async (req, res) => {
+  const payload = { ...req.validatedBody, raised_by: req.user.id };
+  // Auto-set client_id for client users
+  if (req.user.roles?.name === 'client') {
+    if (!req.user.client_id) return res.status(403).json({ error: 'Client ID missing for your account' });
+    payload.client_id = req.user.client_id;
+  }
   const { data, error } = await supabase.from('support_tickets')
-    .insert([{ ...req.validatedBody, raised_by: req.user.id }])
+    .insert([payload])
     .select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.status(201).json(data);

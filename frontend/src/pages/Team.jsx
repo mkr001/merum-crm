@@ -4,6 +4,7 @@ import { Plus, Shield, Phone, Mail, UserX, Key } from 'lucide-react';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
+import useResponsive from '../utils/useResponsive';
 
 const ROLES = ['admin', 'manager', 'accountant', 'sales', 'viewer'];
 const ROLE_STYLE = {
@@ -62,8 +63,8 @@ function UserModal({ user, onClose, onSave }) {
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ background: '#fff', borderRadius: 16, width: 480, padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '12px' }}>
+      <div className="res-modal" style={{ background: '#fff', borderRadius: 16, width: 480, padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
         {/* Header */}
         <div style={{ marginBottom: 20 }}>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1a1a18' }}>
@@ -188,7 +189,7 @@ export default function Team() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+      <div className="res-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1a1a18' }}>Team Members</h1>
           <p style={{ margin: '3px 0 0', fontSize: 13, color: '#888' }}>

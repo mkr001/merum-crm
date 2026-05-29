@@ -5,11 +5,13 @@ import { Search, FileSignature, CheckCircle, XCircle, AlertCircle, FileText, Che
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
+import useResponsive from '../utils/useResponsive';
 
 const STATUS_STYLE = {
   'Pending':                    { bg: '#faeeda', color: '#854f0b' },
   'Documents Pending':          { bg: '#eeedfe', color: '#534ab7' },
   'Verification In Progress':   { bg: '#e6f1fb', color: '#185fa5' },
+  'Pending Agreement Review':   { bg: '#fff2e6', color: '#cc6600' },
   'Approved':                   { bg: '#e1f5ee', color: '#0f6e56' },
   'Rejected':                   { bg: '#fcebeb', color: '#a32d2d' },
   'Active Client':              { bg: '#eaf3de', color: '#3b6d11' },
@@ -36,6 +38,9 @@ export default function OnboardingList() {
       const params = filterStatus ? { status: filterStatus } : {};
       const { data } = await api.get('/onboarding', { params });
       setItems(data.data || []);
+      if (user?.role === 'client' && data.data?.length > 0) {
+        navigate(`/onboarding/${data.data[0].id}`, { replace: true });
+      }
     } catch (err) {
       toast.error('Failed to load onboarding workflows');
     } finally {
@@ -101,7 +106,7 @@ export default function OnboardingList() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+      <div className="res-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1a1a18' }}>Client Onboarding</h1>
           <p style={{ margin: '3px 0 0', fontSize: 13, color: '#888' }}>Manage and verify prospective clients onboarding flows</p>
@@ -109,7 +114,7 @@ export default function OnboardingList() {
       </div>
 
       {/* Filters and Search */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
+      <div className="res-filters" style={{ display: 'flex', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', flex: 1, maxWidth: 320, minWidth: 200 }}>
           <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#aaa' }} />
           <input
@@ -118,11 +123,11 @@ export default function OnboardingList() {
             style={{ width: '100%', padding: '9px 12px 9px 34px', border: '1px solid #ddd', borderRadius: 8, fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
           />
         </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {['', 'Pending', 'Documents Pending', 'Verification In Progress', 'Approved', 'Rejected', 'Active Client'].map((s, i) => (
+        <div className="res-tabs-scroll" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {['', 'Pending', 'Documents Pending', 'Verification In Progress', 'Pending Agreement Review', 'Approved', 'Rejected', 'Active Client'].map((s, i) => (
             <button key={i} onClick={() => setFilterStatus(s)}
               style={{
-                padding: '7px 14px', borderRadius: 20, border: '1px solid', cursor: 'pointer', fontSize: 12, fontWeight: 500,
+                padding: '7px 14px', borderRadius: 20, border: '1px solid', cursor: 'pointer', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap',
                 borderColor: filterStatus === s ? '#C70073' : '#ddd',
                 background: filterStatus === s ? '#fcebf4' : '#fff',
                 color: filterStatus === s ? '#C70073' : '#666',
@@ -135,7 +140,7 @@ export default function OnboardingList() {
       </div>
 
       {/* Main Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <div key={i} style={{ background: '#fff', border: '1px solid #e8e6e0', borderRadius: 12, padding: 20, height: 160 }} />

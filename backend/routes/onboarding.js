@@ -7,6 +7,8 @@ const { validate, onboardingSchema } = require('../utils/validators');
 const multer = require('multer');
 const path = require('path');
 const crypto = require('crypto');
+const { generateAgreementHTML } = require('../utils/agreementGenerator');
+const { sendWelcomeEmail, sendAgreementEmail } = require('../utils/mailer');
 
 const router = express.Router();
 router.use(authenticate);
@@ -26,6 +28,10 @@ const upload = multer({ storage });
 router.get('/', asyncHandler(async (req, res) => {
   const { status, search, page = 1, limit = 50 } = req.query;
   let q = supabase.from('client_onboardings').select('*', { count: 'exact' });
+
+  if (req.user.roles.name === 'client') {
+    q = q.eq('email', req.user.email.toLowerCase().trim());
+  }
 
   if (status) {
     q = q.eq('status', status);
@@ -60,6 +66,10 @@ router.get('/:id', asyncHandler(async (req, res) => {
 
   if (error || !onboarding) return res.status(404).json({ error: 'Onboarding record not found' });
 
+  if (req.user.roles.name === 'client' && onboarding.email?.toLowerCase().trim() !== req.user.email.toLowerCase().trim()) {
+    return res.status(403).json({ error: 'Access denied to this onboarding record' });
+  }
+
   // Fetch related timeline logs
   const { data: logs } = await supabase
     .from('activity_log')
@@ -68,7 +78,12 @@ router.get('/:id', asyncHandler(async (req, res) => {
     .eq('entity_id', onboarding.id)
     .order('created_at', { ascending: true });
 
-  res.json({ onboarding, timeline: logs || [] });
+  let filteredLogs = logs || [];
+  if (req.user.roles.name === 'client') {
+    filteredLogs = filteredLogs.filter(log => !log.notes.toLowerCase().includes('internal') && !log.notes.toLowerCase().includes('rejected by admin'));
+  }
+
+  res.json({ onboarding, timeline: filteredLogs });
 }));
 
 // POST /api/onboarding - Create onboarding from a lead
@@ -108,13 +123,43 @@ router.post('/', validate(onboardingSchema), asyncHandler(async (req, res) => {
     await supabase.from('leads').update({ status: 'converted' }).eq('id', payload.lead_id);
   }
 
-  res.status(201).json(data);
+  // Create client user automatically
+  let clientCredentials = null;
+  if (data.email) {
+    const { data: role } = await supabase.from('roles').select('id').eq('name', 'client').single();
+    if (role) {
+      const { data: existingUser } = await supabase.from('users').select('id').eq('email', data.email.toLowerCase().trim()).single();
+      if (!existingUser) {
+        const bcrypt = require('bcryptjs');
+        const tempPassword = Math.random().toString(36).slice(-8);
+        const password_hash = await bcrypt.hash(tempPassword, 12);
+        const { error: userErr } = await supabase.from('users').insert([{
+          full_name: data.primary_contact || data.company_name,
+          email: data.email.toLowerCase().trim(),
+          password_hash,
+          role_id: role.id,
+          is_active: true
+        }]);
+        if (!userErr) {
+          clientCredentials = { email: data.email.toLowerCase().trim(), password: tempPassword };
+          sendWelcomeEmail(clientCredentials.email, clientCredentials.password).catch(console.error);
+        }
+      }
+    }
+  }
+
+  res.status(201).json({ ...data, clientCredentials });
 }));
 
 // PATCH /api/onboarding/:id - Update onboarding data
 router.patch('/:id', asyncHandler(async (req, res) => {
   const { status, ...updates } = req.body;
-  const oldStatusRes = await supabase.from('client_onboardings').select('status').eq('id', req.params.id).single();
+  const oldStatusRes = await supabase.from('client_onboardings').select('status, email').eq('id', req.params.id).single();
+  
+  if (req.user.roles.name === 'client' && oldStatusRes.data?.email?.toLowerCase().trim() !== req.user.email.toLowerCase().trim()) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
   const oldStatus = oldStatusRes.data?.status;
 
   const payload = { ...updates, updated_at: new Date() };
@@ -152,11 +197,15 @@ router.post('/:id/upload', upload.single('file'), asyncHandler(async (req, res) 
   // Fetch current onboarding record
   const { data: record, error: fetchErr } = await supabase
     .from('client_onboardings')
-    .select('documents')
+    .select('documents, email')
     .eq('id', req.params.id)
     .single();
 
   if (fetchErr || !record) return res.status(404).json({ error: 'Onboarding record not found' });
+
+  if (req.user.roles.name === 'client' && record.email?.toLowerCase().trim() !== req.user.email.toLowerCase().trim()) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
 
   const currentDocs = record.documents || {};
   const fileUrl = `${process.env.API_BASE_URL || 'http://localhost:5000'}/uploads/${req.file.filename}`;
@@ -205,6 +254,8 @@ router.post('/:id/upload', upload.single('file'), asyncHandler(async (req, res) 
 
 // POST /api/onboarding/:id/approve - Approve client onboarding and create profile
 router.post('/:id/approve', authorize('admin', 'manager'), asyncHandler(async (req, res) => {
+  const { send_agreement } = req.body;
+
   const { data: record, error: fetchErr } = await supabase
     .from('client_onboardings')
     .select('*')
@@ -214,6 +265,12 @@ router.post('/:id/approve', authorize('admin', 'manager'), asyncHandler(async (r
   if (fetchErr || !record) return res.status(404).json({ error: 'Onboarding record not found' });
   if (record.status === 'Active Client') {
     return res.status(400).json({ error: 'Client is already active and approved.' });
+  }
+
+  // If we just want to put it in review state
+  if (send_agreement === false) {
+    await supabase.from('client_onboardings').update({ status: 'Pending Agreement Review', updated_at: new Date() }).eq('id', req.params.id);
+    return res.json({ message: 'Moved to Pending Agreement Review', status: 'Pending Agreement Review' });
   }
 
   // 1. Generate unique client UID (e.g. MRM-CLI-0042)
@@ -299,6 +356,10 @@ router.post('/:id/approve', authorize('admin', 'manager'), asyncHandler(async (r
     notes: `Client profile created with ID ${clientUid}`
   }]);
 
+  if (record.email) {
+    sendAgreementEmail(record.email, record.company_name).catch(console.error);
+  }
+
   res.json({ message: 'Onboarding approved. Client profile generated successfully!', client, clientUid });
 }));
 
@@ -339,8 +400,13 @@ router.get('/:id/agreement', asyncHandler(async (req, res) => {
 
   if (error || !record) return res.status(404).json({ error: 'Onboarding record not found' });
 
-  const { generateAgreementHTML } = require('../utils/agreementGenerator');
-  const html = generateAgreementHTML(record);
+  let html = '';
+  if (record.agreement_overrides && record.agreement_overrides.custom_html) {
+    html = record.agreement_overrides.custom_html;
+  } else {
+    const { generateAgreementHTML } = require('../utils/agreementGenerator');
+    html = generateAgreementHTML(record);
+  }
 
   res.setHeader('Content-Type', 'text/html');
   res.send(html);

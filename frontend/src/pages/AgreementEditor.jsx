@@ -1,68 +1,12 @@
 // src/pages/AgreementEditor.jsx
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft, Save, Printer, RotateCcw, Plus, Trash2,
-  ChevronDown, ChevronUp, FileSignature
-} from 'lucide-react';
+import { ArrowLeft, Save, Printer, RotateCcw, FileSignature } from 'lucide-react';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
-const DEFAULT_SERVICE_LEVELS = [
-  { component: 'Monthly financial reports', target: 'Delivered by the 8th working day of each month' },
-  { component: 'Turnaround time for accounting', target: 'Within 2 business days' },
-  { component: 'Finalized year end Accounts', target: 'Within 60 days of Financial Year end' },
-  { component: 'Query Response Time', target: 'Within 1 business day' },
-  { component: 'Statutory Compliances', target: 'Before the time limits prescribed by corresponding Laws' },
-];
-
-const DEFAULT_RESPONSIBILITIES = [
-  'Provide daily transaction updates through the pre-designed sheet before the 2nd business day of the following month.',
-  'Notify changes in Directors, key personnel or regulatory status within 7 days.',
-  'Notify of general/board meetings at least 7 days in advance.',
-  'Provide joining/resignation updates for payroll staff within 7 days.',
-  'Furnish all physical/digital copy supporting documents for accounting and validation.',
-  'Approve deliverables within 5 working days of submission.',
-];
-
-// ── Collapsible Section ────────────────────────────────────────────────────
-function Section({ title, children, defaultOpen = true }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div style={{ border: '1px solid #e8e6e0', borderRadius: 10, marginBottom: 14, overflow: 'hidden' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: '11px 16px', background: '#f8f7f4', border: 'none', cursor: 'pointer',
-          fontSize: 12.5, fontWeight: 700, color: '#333', textAlign: 'left'
-        }}
-      >
-        {title}
-        {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-      </button>
-      {open && <div style={{ padding: '16px' }}>{children}</div>}
-    </div>
-  );
-}
-
-// ── Field helpers ──────────────────────────────────────────────────────────
-const inputStyle = {
-  width: '100%', padding: '8px 10px', border: '1px solid #ddd',
-  borderRadius: 7, fontSize: 13, boxSizing: 'border-box',
-  outline: 'none', background: '#fff'
-};
-const labelStyle = { display: 'block', fontSize: 11.5, fontWeight: 600, color: '#555', marginBottom: 4 };
-const Field = ({ label, children }) => (
-  <div style={{ marginBottom: 12 }}>
-    <label style={labelStyle}>{label}</label>
-    {children}
-  </div>
-);
-
-// ══════════════════════════════════════════════════════════════════════════
 export default function AgreementEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -70,123 +14,182 @@ export default function AgreementEditor() {
   const [onboarding, setOnboarding] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [previewHtml, setPreviewHtml] = useState('');
-  const [previewLoading, setPreviewLoading] = useState(false);
   const iframeRef = useRef(null);
-  const previewTimeout = useRef(null);
+
+  // ── Load record & HTML ───────────────────────────────────────────────────
+  const loadAgreement = useCallback(async (forceReset = false) => {
+    setLoading(true);
+    try {
+      const { data: onbData } = await api.get(`/onboarding/${id}`);
+      setOnboarding(onbData.onboarding);
+
+      // Fetch the agreement HTML
+      let html = '';
+      if (forceReset) {
+        // If resetting, we need the backend to generate the default. We can fetch the raw default by passing a flag or temporarily clearing custom_html.
+        await api.patch(`/onboarding/${id}`, { agreement_overrides: {} });
+        const resp = await fetch(`${API_BASE}/onboarding/${id}/agreement`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('merum_token')}` }
+        });
+        html = await resp.text();
+      } else {
+        const resp = await fetch(`${API_BASE}/onboarding/${id}/agreement`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('merum_token')}` }
+        });
+        html = await resp.text();
+      }
+
+      // Write to iframe
+      if (iframeRef.current) {
+        const doc = iframeRef.current.contentDocument;
+        doc.open();
+        doc.write(html);
+        doc.close();
+        doc.designMode = 'on'; // Make it fully editable!
+        
+        // Add some basic styles to the body for the editing experience
+        const style = doc.createElement('style');
+        style.innerHTML = `
+          body { padding: 20px; background: #e8e6e0; }
+          .page { cursor: text; }
+          .no-print-bar { display: none !important; }
+        `;
+        doc.head.appendChild(style);
+      }
+    } catch (err) {
+      toast.error('Failed to load agreement');
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    loadAgreement();
+  }, [loadAgreement]);
 
   // ── Overrides state ────────────────────────────────────────────────────
   const [overrides, setOverrides] = useState({
     effective_date: '',
     master_agreement_ref: 'Transforming Rural India Foundation',
-    master_agreement_date: '01st February 2026',
+    master_agreement_date: '01st Feburary,2026',
     monthly_fee: '15,000',
-    fee_text: 'Monthly Fee of INR 15,000/- plus applicable GST.',
+    fee_text: "Monthly INR 15,000/- plus applicable GST. These fees will be exclusive of Government / Departmental fees and other out of pocket expenses (if above Rs. 1,000/- approval from client required) as applicable.\n\nNote: Currently, one visit shall be provided at your location upon prior scheduling. The conveyance cost (if required) for such visit shall be borne by the client.",
     merum_signatory_name: 'Arvind Tripathi',
     merum_signatory_title: 'Director',
     client_signatory_name: '',
     client_signature_name: '',
     client_signatory_title: '',
-    service_levels: DEFAULT_SERVICE_LEVELS.map(sl => ({ ...sl })),
-    client_responsibilities: [...DEFAULT_RESPONSIBILITIES],
+    service_levels: [], // Populated by DEFAULT_SERVICE_LEVELS
+    client_responsibilities: [], // Populated by DEFAULT_RESPONSIBILITIES
     custom_clauses: [],
   });
 
-  // ── Load record ────────────────────────────────────────────────────────
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const { data } = await api.get(`/onboarding/${id}`);
-        const rec = data.onboarding;
-        setOnboarding(rec);
-        // Merge saved overrides over defaults
-        const saved = rec.agreement_overrides || {};
-        setOverrides(prev => ({
-          ...prev,
-          effective_date: saved.effective_date || rec.auth_date?.slice(0, 10) || '',
-          client_signatory_name: saved.client_signatory_name || rec.authorized_signatory || '',
-          client_signature_name: saved.client_signature_name || rec.signature_name || '',
-          client_signatory_title: saved.client_signatory_title || rec.designation_auth || '',
-          ...(saved.master_agreement_ref   && { master_agreement_ref:   saved.master_agreement_ref }),
-          ...(saved.master_agreement_date  && { master_agreement_date:  saved.master_agreement_date }),
-          ...(saved.monthly_fee            && { monthly_fee:            saved.monthly_fee }),
-          ...(saved.fee_text               && { fee_text:               saved.fee_text }),
-          ...(saved.merum_signatory_name   && { merum_signatory_name:   saved.merum_signatory_name }),
-          ...(saved.merum_signatory_title  && { merum_signatory_title:  saved.merum_signatory_title }),
-          ...(saved.service_levels         && saved.service_levels.length > 0 && { service_levels: saved.service_levels }),
-          ...(saved.client_responsibilities && saved.client_responsibilities.length > 0 && { client_responsibilities: saved.client_responsibilities }),
-          ...(saved.custom_clauses         && { custom_clauses: saved.custom_clauses }),
-        }));
-      } catch {
-        toast.error('Failed to load onboarding record');
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, [id]);
-
-  // ── Live preview — debounced fetch ─────────────────────────────────────
-  const refreshPreview = useCallback(() => {
-    clearTimeout(previewTimeout.current);
-    previewTimeout.current = setTimeout(async () => {
-      setPreviewLoading(true);
-      try {
-        // Save overrides temporarily in local state, then fetch preview
-        const resp = await fetch(`${API_BASE}/onboarding/${id}/agreement?preview=1`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('merum_token')}`
-          },
-          body: JSON.stringify({ overrides })
-        });
-        if (resp.ok) {
-          const html = await resp.text();
-          setPreviewHtml(html);
-        }
-      } catch {
-        // silent fail on preview
-      } finally {
-        setPreviewLoading(false);
-      }
-    }, 600);
-  }, [id, overrides]);
-
-  useEffect(() => {
-    if (onboarding) refreshPreview();
-  }, [overrides, onboarding]);
-
-  // ── Setters ────────────────────────────────────────────────────────────
-  const set = (key, value) => setOverrides(prev => ({ ...prev, [key]: value }));
-
-  const setServiceLevel = (idx, field, value) => {
-    const arr = overrides.service_levels.map((sl, i) => i === idx ? { ...sl, [field]: value } : sl);
-    set('service_levels', arr);
-  };
-  const addServiceLevel = () => set('service_levels', [...overrides.service_levels, { component: '', target: '' }]);
-  const removeServiceLevel = (idx) => set('service_levels', overrides.service_levels.filter((_, i) => i !== idx));
-
-  const setResponsibility = (idx, value) => {
-    const arr = overrides.client_responsibilities.map((r, i) => i === idx ? value : r);
-    set('client_responsibilities', arr);
-  };
-  const addResponsibility = () => set('client_responsibilities', [...overrides.client_responsibilities, '']);
-  const removeResponsibility = (idx) => set('client_responsibilities', overrides.client_responsibilities.filter((_, i) => i !== idx));
-
-  const setClause = (idx, field, value) => {
-    const arr = overrides.custom_clauses.map((c, i) => i === idx ? { ...c, [field]: value } : c);
-    set('custom_clauses', arr);
-  };
-  const addClause = () => set('custom_clauses', [...overrides.custom_clauses, { number: `${12 + overrides.custom_clauses.length}`, title: '', text: '' }]);
-  const removeClause = (idx) => set('custom_clauses', overrides.custom_clauses.filter((_, i) => i !== idx));
-
   // ── Save overrides to DB ───────────────────────────────────────────────
+  const DEFAULT_SERVICE_LEVELS = [
+  { component: 'Monthly financial reports', target: 'Delivered by the 8th working day of each month' },
+  { component: 'Turnaround time for accounting', target: 'Within 2 business days' },
+  { component: 'Finalized year end Accounts', target: 'Within 60 days' },
+  { component: 'Any special Report', target: 'Within 5 Working days' },
+  { component: 'Query Response Time', target: 'Within 1 business day' },
+  { component: 'Data accuracy', target: '100%' },
+  { component: 'System uptime (if using shared platform)', target: '99% monthly' },
+  { component: 'Issue resolution', target: 'Case to case, agreed between parties' },
+  { component: 'Statutory Compliances', target: 'Before the time limit prescribed by the different Laws' },
+  { component: 'Closure File at the end of the Financial Year\n- Opening and Closing Balance\n- Income & Expenditure, Balance sheet\n- Cash Flow and related schedules\n- Copy of all related challans and returns\n- Full accounting data backup - Pen drive\n- Voucher Files, Agreements etc.', target: 'Within 90 days of Financial Year end' }
+];
+
+const DEFAULT_RESPONSIBILITIES = [
+  'Provide daily transaction updates through pre-designed Transaction Sheet via email /designated whatsapp group before the 2nd business working day of the following month. Preferably via email. If volume of transactions increase by more than 20% shall require mutual written agreement on revised timelines and/or fees before implementation. Provide Monthly bank statements before 2nd day of following month.',
+  'Notify of any changes in regulatory requirements, Directors, shareholders, key management personnel within 7 days of such change.',
+  'Give prior information of at least 7 days of Board/ General meeting to be conducted, agenda points, and post meeting information, attendance, decisions made in such meeting of Board of Trustees',
+  'Provide information of any agreements, arrangements entered by the company withing 7 days of such agreement, arrangements made',
+  'Provide joining and resignation of staff members within 7 days along with job positions, KYC documents',
+  'Attend and active participation of monthly meeting with Merum team on issues raised, resolutions, actions to be taken and any changes in approach required from either side',
+  'Furnishing all hard copies supporting documents for accounting',
+  'Provide timely, accurate and complete data/documents required for processing',
+  'Notify any changes in regulatory requirements',
+  'Notify people changes in the key Decision-making',
+  'Approve deliverables within 5 working days of submission. In the absence of response within 5 working days, deliverables shall not be deemed automatically approved unless explicitly confirmed in writing.',
+  'Note: Any delays in month end closing on account of system unavailability, client information pending, among others (matter escalated to client) might have cascading effect on other deliverables. Further, if volumes of transactions rise beyond 20% of existing load, then additional time may be required as additional resourcing arrangements might have to be done.',
+  'Official financial data and compliance submissions shall be communicated only through email or designated secure shared platform. Informal communication channels shall not constitute official submission. (For example, WhatsApp)'
+];
+
+const DEFAULT_SOW_HTML = `
+<p style="font-size:12px; font-weight: 700; text-decoration: underline; margin:15px 0 5px;">Book Keeping, Accounting Support</p>
+<ul style="font-size:12px; margin:0 0 10px; padding-left:20px;">
+  <li>Bookkeeping/ support and review bookkeeping as per defined chart of accounts</li>
+  <li>Set up and Provide access to a remote resolution desk to resolve technical issues in accounting and statutory compliance matters for Producer Companies</li>
+  <li>Free access to cloud-based accounting software</li>
+</ul>
+
+<p style="font-size:12px; font-weight: 700; text-decoration: underline; margin:15px 0 5px;">Statutory Compliances support</p>
+<ul style="font-size:12px; margin:0 0 10px; padding-left:20px;">
+  <li><strong>GST</strong>
+    <ul style="list-style-type:circle;">
+      <li>GSTR-1</li>
+      <li>GSTR-3B</li>
+      <li>GST Annual Return-9</li>
+    </ul>
+  </li>
+  <li><strong>INCOME TAX</strong>
+    <ul style="list-style-type:circle;">
+      <li>Quarter TDS Return Filing</li>
+      <li>Quarter Form 16A Issue</li>
+      <li>Support Tax Audit where applicable</li>
+      <li>Income Annual Tax Return</li>
+    </ul>
+  </li>
+  <li><strong>COMPANY LAW</strong>
+    <ul style="list-style-type:circle;">
+      <li>Roc Annual Return Form MGT-7</li>
+      <li>ADT - 1: Auditor Appointment</li>
+      <li>KYC of the Company Director(s)</li>
+      <li>DIR-12: Intimation for the Changing of Board Members</li>
+      <li>ROC Annual Financial Statement Form AOC-4</li>
+      <li>Board Meetings & AGM minutes</li>
+      <li>Share Holders and Board Members updates</li>
+      <li>Pass-3 Filing</li>
+    </ul>
+  </li>
+  <li>Other laws compliance like PF, ESIC</li>
+</ul>
+
+<p style="font-size:12px; font-weight: 700; text-decoration: underline; margin:15px 0 5px;">Reporting and Management review support</p>
+<ul style="font-size:12px; margin:0 0 10px; padding-left:20px;">
+  <li>Monthly Management Report Sharing in pre agreed format</li>
+  <li>Allotment of Shares and printing Share Certificates</li>
+</ul>
+
+<p style="font-size:12px; font-weight: 700; text-decoration: underline; margin:15px 0 5px;">Audit and Records keeping support</p>
+<ul style="font-size:12px; margin:0 0 10px; padding-left:20px;">
+  <li>Year-end Accounts Finalization</li>
+  <li>Year-end Audit support Internal, Statutory and for Grants where applicable</li>
+  <li>Documentation of Statutory Filings and Final and Audited Accounts</li>
+</ul>
+`;
+
   const handleSave = async () => {
+    if (!iframeRef.current) return;
+    
     setSaving(true);
     try {
-      await api.patch(`/onboarding/${id}`, { agreement_overrides: overrides });
-      toast.success('Agreement draft saved!');
+      // Get the edited HTML from the iframe
+      const doc = iframeRef.current.contentDocument;
+      
+      // Clone it to remove our editing-specific styles before saving
+      const clone = doc.documentElement.cloneNode(true);
+      const styles = clone.querySelectorAll('style');
+      if (styles.length > 0) {
+        // Remove the last style tag which we injected
+        styles[styles.length - 1].remove(); 
+      }
+      
+      const customHtml = '<!DOCTYPE html>\n' + clone.outerHTML;
+
+      await api.patch(`/onboarding/${id}`, { 
+        agreement_overrides: { custom_html: customHtml } 
+      });
+      toast.success('Agreement saved successfully!');
     } catch {
       toast.error('Failed to save changes');
     } finally {
@@ -194,45 +197,31 @@ export default function AgreementEditor() {
     }
   };
 
+  const handleApproveAndSend = async () => {
+    if (!window.confirm("This will finalize the agreement and email it to the client. Proceed?")) return;
+    await handleSave(); // save any pending edits first
+    try {
+      await api.post(`/onboarding/${id}/approve`, { send_agreement: true });
+      toast.success('Client activated and Agreement emailed!');
+      navigate('/onboarding');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to send agreement');
+    }
+  };
+
   // ── Reset to defaults ──────────────────────────────────────────────────
   const handleReset = async () => {
-    if (!window.confirm('Reset all agreement customizations to default values?')) return;
-    await api.patch(`/onboarding/${id}`, { agreement_overrides: {} });
-    const rec = onboarding;
-    setOverrides({
-      effective_date: rec.auth_date?.slice(0, 10) || '',
-      master_agreement_ref: 'Transforming Rural India Foundation',
-      master_agreement_date: '01st February 2026',
-      monthly_fee: '15,000',
-      fee_text: 'Monthly Fee of INR 15,000/- plus applicable GST.',
-      merum_signatory_name: 'Arvind Tripathi',
-      merum_signatory_title: 'Director',
-      client_signatory_name: rec.authorized_signatory || '',
-      client_signature_name: rec.signature_name || '',
-      client_signatory_title: rec.designation_auth || '',
-      service_levels: DEFAULT_SERVICE_LEVELS.map(sl => ({ ...sl })),
-      client_responsibilities: [...DEFAULT_RESPONSIBILITIES],
-      custom_clauses: [],
-    });
-    toast.success('Reset to defaults');
+    if (!window.confirm('Reset all customizations and revert to the default template? This cannot be undone.')) return;
+    await loadAgreement(true);
+    toast.success('Reset to default template');
   };
 
   // ── Print ──────────────────────────────────────────────────────────────
   const handlePrint = async () => {
     // Save first, then open
-    setSaving(true);
-    try {
-      await api.patch(`/onboarding/${id}`, { agreement_overrides: overrides });
-    } catch {}
-    setSaving(false);
+    await handleSave();
     window.open(`${API_BASE}/onboarding/${id}/agreement?token=${localStorage.getItem('merum_token')}`, '_blank');
   };
-
-  if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300, color: '#888' }}>
-      Loading agreement...
-    </div>
-  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 60px)', overflow: 'hidden' }}>
@@ -256,26 +245,36 @@ export default function AgreementEditor() {
               Agreement Editor — {onboarding?.company_name}
             </div>
             <div style={{ fontSize: 11.5, color: '#888', marginTop: 1 }}>
-              Edit the agreement letter before printing. Changes are saved per client.
+              Edit the document below directly. Click anywhere to type and make changes.
             </div>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             onClick={handleReset}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', border: '1px solid #ddd', borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', color: '#666' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', border: '1px solid #ddd', borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', color: '#e24b4a' }}
           >
-            <RotateCcw size={13} /> Reset to Default
+            <RotateCcw size={13} /> Reset Template
           </button>
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || loading}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: '#f5f5f5', border: '1px solid #ddd', borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', color: '#333' }}
           >
             <Save size={13} /> {saving ? 'Saving...' : 'Save Draft'}
           </button>
+          {onboarding?.status === 'Pending Agreement Review' && (
+            <button
+              onClick={handleApproveAndSend}
+              disabled={loading}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px', background: '#2d9d78', border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', color: '#fff' }}
+            >
+              Approve & Send to Client
+            </button>
+          )}
           <button
             onClick={handlePrint}
+            disabled={loading}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px', background: 'linear-gradient(135deg, #C70073, #9e005b)', border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', color: '#fff' }}
           >
             <Printer size={13} /> Print / PDF
@@ -283,164 +282,23 @@ export default function AgreementEditor() {
         </div>
       </div>
 
-      {/* ── Split Panel ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '400px 1fr', flex: 1, overflow: 'hidden' }}>
-
-        {/* LEFT — Edit Form */}
-        <div style={{ overflowY: 'auto', padding: '20px 16px', background: '#f8f7f4', borderRight: '1px solid #e8e6e0' }}>
-
-          {/* General */}
-          <Section title="📅 General / Header" defaultOpen={true}>
-            <Field label="Effective Date">
-              <input type="date" style={inputStyle} value={overrides.effective_date} onChange={e => set('effective_date', e.target.value)} />
-            </Field>
-            <Field label="Master Agreement Reference (Organization Name)">
-              <input style={inputStyle} value={overrides.master_agreement_ref} onChange={e => set('master_agreement_ref', e.target.value)} />
-            </Field>
-            <Field label="Master Agreement Date">
-              <input style={inputStyle} value={overrides.master_agreement_date} onChange={e => set('master_agreement_date', e.target.value)} placeholder="e.g. 01st February 2026" />
-            </Field>
-          </Section>
-
-          {/* Fees */}
-          <Section title="💰 Fees & Commercials">
-            <Field label="Monthly Fee Amount (₹)">
-              <input style={inputStyle} value={overrides.monthly_fee} onChange={e => {
-                set('monthly_fee', e.target.value);
-                set('fee_text', `Monthly Fee of INR ${e.target.value}/- plus applicable GST.`);
-              }} placeholder="e.g. 15,000" />
-            </Field>
-            <Field label="Full Fee Description Text">
-              <textarea
-                style={{ ...inputStyle, minHeight: 70, resize: 'vertical' }}
-                value={overrides.fee_text}
-                onChange={e => set('fee_text', e.target.value)}
-              />
-            </Field>
-          </Section>
-
-          {/* Merum Signatory */}
-          <Section title="🏢 Merum Signatory">
-            <Field label="Signatory Name">
-              <input style={inputStyle} value={overrides.merum_signatory_name} onChange={e => set('merum_signatory_name', e.target.value)} />
-            </Field>
-            <Field label="Title / Designation">
-              <input style={inputStyle} value={overrides.merum_signatory_title} onChange={e => set('merum_signatory_title', e.target.value)} />
-            </Field>
-          </Section>
-
-          {/* Client Signatory */}
-          <Section title="👤 Client Signatory">
-            <Field label="Authorized Signatory Name">
-              <input style={inputStyle} value={overrides.client_signatory_name} onChange={e => set('client_signatory_name', e.target.value)} />
-            </Field>
-            <Field label="Signature (typed name)">
-              <input style={{ ...inputStyle, fontFamily: 'cursive', fontSize: 15 }} value={overrides.client_signature_name} onChange={e => set('client_signature_name', e.target.value)} />
-            </Field>
-            <Field label="Designation">
-              <input style={inputStyle} value={overrides.client_signatory_title} onChange={e => set('client_signatory_title', e.target.value)} placeholder="Director / Partner" />
-            </Field>
-          </Section>
-
-          {/* Service Levels */}
-          <Section title="📊 Service Levels Table">
-            {overrides.service_levels.map((sl, idx) => (
-              <div key={idx} style={{ background: '#fff', border: '1px solid #eee', borderRadius: 8, padding: 10, marginBottom: 10 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#888' }}>Row {idx + 1}</span>
-                  <button onClick={() => removeServiceLevel(idx)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#e24b4a', padding: 2 }}>
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-                <input style={{ ...inputStyle, marginBottom: 6 }} placeholder="Service Component" value={sl.component} onChange={e => setServiceLevel(idx, 'component', e.target.value)} />
-                <input style={inputStyle} placeholder="Service Level Target" value={sl.target} onChange={e => setServiceLevel(idx, 'target', e.target.value)} />
-              </div>
-            ))}
-            <button onClick={addServiceLevel} style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '7px 12px', border: '1px dashed #C70073', borderRadius: 7, background: '#fff9fb', color: '#C70073', fontSize: 12, fontWeight: 600, cursor: 'pointer', justifyContent: 'center' }}>
-              <Plus size={13} /> Add Row
-            </button>
-          </Section>
-
-          {/* Client Responsibilities */}
-          <Section title="📋 Client Responsibilities">
-            {overrides.client_responsibilities.map((r, idx) => (
-              <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'flex-start' }}>
-                <span style={{ fontSize: 12, color: '#888', marginTop: 9, minWidth: 18 }}>{idx + 1}.</span>
-                <textarea
-                  style={{ ...inputStyle, minHeight: 52, resize: 'vertical', flex: 1 }}
-                  value={r}
-                  onChange={e => setResponsibility(idx, e.target.value)}
-                />
-                <button onClick={() => removeResponsibility(idx)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#e24b4a', marginTop: 8 }}>
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            ))}
-            <button onClick={addResponsibility} style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '7px 12px', border: '1px dashed #C70073', borderRadius: 7, background: '#fff9fb', color: '#C70073', fontSize: 12, fontWeight: 600, cursor: 'pointer', justifyContent: 'center' }}>
-              <Plus size={13} /> Add Responsibility
-            </button>
-          </Section>
-
-          {/* Custom Clauses */}
-          <Section title="📝 Custom Clauses (Beyond Clause 11)" defaultOpen={false}>
-            <p style={{ fontSize: 11.5, color: '#888', margin: '0 0 12px', lineHeight: 1.5 }}>
-              Add additional clauses that will appear on Page 3 after Clause 11, before the signature block.
-            </p>
-            {overrides.custom_clauses.map((c, idx) => (
-              <div key={idx} style={{ background: '#fff', border: '1px solid #eee', borderRadius: 8, padding: 12, marginBottom: 10 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#555' }}>Custom Clause {idx + 1}</span>
-                  <button onClick={() => removeClause(idx)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#e24b4a', padding: 2 }}>
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: 8, marginBottom: 8 }}>
-                  <div>
-                    <label style={labelStyle}>Number</label>
-                    <input style={inputStyle} value={c.number} onChange={e => setClause(idx, 'number', e.target.value)} placeholder="12" />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Title</label>
-                    <input style={inputStyle} value={c.title} onChange={e => setClause(idx, 'title', e.target.value)} placeholder="Special Terms" />
-                  </div>
-                </div>
-                <label style={labelStyle}>Clause Text</label>
-                <textarea
-                  style={{ ...inputStyle, minHeight: 90, resize: 'vertical' }}
-                  value={c.text}
-                  onChange={e => setClause(idx, 'text', e.target.value)}
-                  placeholder="Enter the full text of this clause..."
-                />
-              </div>
-            ))}
-            <button onClick={addClause} style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '7px 12px', border: '1px dashed #534ab7', borderRadius: 7, background: '#f0effd', color: '#534ab7', fontSize: 12, fontWeight: 600, cursor: 'pointer', justifyContent: 'center' }}>
-              <Plus size={13} /> Add Custom Clause
-            </button>
-          </Section>
-
-        </div>
-
-        {/* RIGHT — Live Preview */}
-        <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#e8e6e0' }}>
-          <div style={{ padding: '8px 16px', background: '#fff', borderBottom: '1px solid #e8e6e0', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>📄 Live Preview</span>
-            {previewLoading && <span style={{ fontSize: 11, color: '#C70073', fontWeight: 600 }}>Refreshing...</span>}
-            <span style={{ fontSize: 11, color: '#aaa', marginLeft: 'auto' }}>Preview updates automatically as you edit</span>
+      {/* ── Full Screen Editor ── */}
+      <div style={{ flex: 1, overflow: 'hidden', background: '#e8e6e0', position: 'relative' }}>
+        {loading && (
+          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: '#888' }}>
+            Loading Editor...
           </div>
-          {previewHtml ? (
-            <iframe
-              ref={iframeRef}
-              srcDoc={previewHtml}
-              style={{ flex: 1, border: 'none', width: '100%' }}
-              title="Agreement Preview"
-            />
-          ) : (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10, color: '#aaa' }}>
-              <FileSignature size={36} style={{ opacity: 0.3 }} />
-              <span style={{ fontSize: 13 }}>Preview will appear here</span>
-            </div>
-          )}
-        </div>
+        )}
+        <iframe
+          ref={iframeRef}
+          style={{ 
+            width: '100%', 
+            height: '100%', 
+            border: 'none',
+            visibility: loading ? 'hidden' : 'visible'
+          }}
+          title="Agreement Editor"
+        />
       </div>
     </div>
   );

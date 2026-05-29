@@ -8,8 +8,9 @@ import { useAuth } from '../context/AuthContext';
 import * as XLSX from 'xlsx';
 
 const ORG_TYPES = ['NGO', 'FPO', 'Research', 'Community', 'Social Enterprise', 'Other'];
+import useResponsive from '../utils/useResponsive';
 
-function BulkUploadModal({ onClose, onSave }) {
+function BulkUploadModal({ onClose, onSave, isMobile }) {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState(null);
@@ -52,7 +53,7 @@ function BulkUploadModal({ onClose, onSave }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ background: '#fff', borderRadius: 16, width: 480, padding: 28 }}>
+      <div style={{ background: '#fff', borderRadius: 16, width: isMobile ? '95%' : 480, padding: isMobile ? 20 : 28 }}>
         <h2 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 700 }}>Bulk Upload Clients</h2>
         
         {results ? (
@@ -88,7 +89,7 @@ function BulkUploadModal({ onClose, onSave }) {
   );
 }
 
-function ClientModal({ client, onClose, onSave }) {
+function ClientModal({ client, isMobile, onClose, onSave }) {
   const [form, setForm] = useState(client || { status: 'active', country: 'India' });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -112,9 +113,9 @@ function ClientModal({ client, onClose, onSave }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ background: '#fff', borderRadius: 16, width: 580, maxHeight: '90vh', overflowY: 'auto', padding: 28 }}>
+      <div style={{ background: '#fff', borderRadius: 16, width: isMobile ? '95%' : 580, maxHeight: '90vh', overflowY: 'auto', padding: isMobile ? 20 : 28 }}>
         <h2 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 700 }}>{form.id ? 'Edit Client' : 'Add New Client'}</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 14 }}>
           <div style={{ gridColumn: '1/-1' }}>
             <label style={labelStyle}>Organization Name *</label>
             <input style={inputStyle} value={form.org_name || ''} onChange={e => set('org_name', e.target.value)} />
@@ -198,6 +199,7 @@ function ClientModal({ client, onClose, onSave }) {
 }
 
 export default function Clients() {
+  const { isMobile } = useResponsive();
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -239,7 +241,7 @@ export default function Clients() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: 12, marginBottom: 20 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1a1a18' }}>Clients</h1>
           <p style={{ margin: '3px 0 0', fontSize: 13, color: '#888' }}>{clients.length} {viewTab === 'deleted' ? 'deleted' : 'total'} clients</p>
@@ -385,6 +387,7 @@ export default function Clients() {
       {modal === 'new' && (
         <ClientModal
           client={null}
+          isMobile={isMobile}
           onClose={() => setModal(null)}
           onSave={() => { toast.success('Client saved!'); fetchClients(); }}
         />
@@ -392,6 +395,7 @@ export default function Clients() {
       
       {modal === 'bulk' && (
         <BulkUploadModal
+          isMobile={isMobile}
           onClose={() => setModal(null)}
           onSave={() => fetchClients()}
         />

@@ -21,7 +21,13 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 router.get('/', async (req, res) => { 
-  const { client_id } = req.query; 
+  let { client_id } = req.query;
+  
+  if (req.user.roles?.name === 'client') {
+    if (!req.user.client_id) return res.json({ data: [] });
+    client_id = req.user.client_id;
+  }
+
   let q = supabase.from('documents').select('*, users!documents_uploaded_by_fkey(full_name), clients(org_name)'); 
   if (client_id) q = q.eq('client_id', client_id); 
   const { data, error } = await q.order('created_at', { ascending: false }); 
@@ -31,8 +37,13 @@ router.get('/', async (req, res) => {
 
 // Bulk file upload
 router.post('/bulk', upload.array('files', 20), async (req, res) => {
-  const { client_id, doc_type } = req.body;
+  let { client_id, doc_type } = req.body;
   
+  if (req.user.roles?.name === 'client') {
+    if (!req.user.client_id) return res.status(403).json({ error: 'Client ID missing for your account' });
+    client_id = req.user.client_id;
+  }
+
   if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No files uploaded' });
   
   const docsToInsert = req.files.map(file => ({
@@ -50,12 +61,19 @@ router.post('/bulk', upload.array('files', 20), async (req, res) => {
 });
 
 router.post('/', async (req, res) => { 
-  const { data, error } = await supabase.from('documents').insert([{ ...req.body, uploaded_by: req.user.id }]).select().single(); 
+  const payload = { ...req.body, uploaded_by: req.user.id };
+  if (req.user.roles?.name === 'client') {
+    payload.client_id = req.user.client_id;
+  }
+  const { data, error } = await supabase.from('documents').insert([payload]).select().single(); 
   if (error) return res.status(500).json({ error: error.message }); 
   res.status(201).json(data); 
 });
 
 router.delete('/:id', async (req, res) => { 
+  if (req.user.roles?.name === 'client') {
+    return res.status(403).json({ error: 'Clients cannot delete documents directly' });
+  }
   await supabase.from('documents').delete().eq('id', req.params.id); 
   res.json({ message: 'Deleted' }); 
 });

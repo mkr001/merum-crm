@@ -103,6 +103,43 @@ router.patch('/:id/convert', authorize('admin', 'manager'), asyncHandler(async (
   res.json({ message: 'Lead converted to client', client });
 }));
 
+// POST /api/leads/bulk — Upload bulk leads
+router.post('/bulk', authorize('admin', 'manager', 'sales'), asyncHandler(async (req, res) => {
+  const { leads } = req.body;
+  if (!leads || !Array.isArray(leads)) return res.status(400).json({ error: 'Leads array required' });
+
+  const payload = leads.map(lead => ({
+    org_name: lead.org_name,
+    contact_person: lead.contact_person || null,
+    email: lead.email || null,
+    phone: lead.phone || null,
+    org_type: lead.org_type || 'Other',
+    source: lead.source || 'Website',
+    status: lead.status || 'new',
+    expected_value: lead.expected_value ? Number(lead.expected_value) : null,
+    assigned_to: req.user.id
+  }));
+
+  const { data, error } = await supabase.from('leads').insert(payload).select();
+  if (error) return res.status(500).json({ error: error.message });
+
+  await supabase.from('activity_log').insert([{
+    performed_by: req.user.id, entity_type: 'lead',
+    entity_id: null, action: 'bulk_created', new_value: { count: data.length }
+  }]);
+
+  res.json({ message: 'Leads uploaded successfully', successCount: data.length });
+}));
+
+// POST /api/leads/bulk-delete
+router.post('/bulk-delete', authorize('admin'), asyncHandler(async (req, res) => {
+  const { ids } = req.body;
+  if (!ids || !Array.isArray(ids)) return res.status(400).json({ error: 'IDs array required' });
+  const { error } = await supabase.from('leads').delete().in('id', ids);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ message: 'Leads deleted' });
+}));
+
 // DELETE /api/leads/:id
 router.delete('/:id', authorize('admin'), asyncHandler(async (req, res) => {
   const { error } = await supabase.from('leads').delete().eq('id', req.params.id);

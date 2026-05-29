@@ -5,8 +5,10 @@ import { ArrowLeft, Trash2, RotateCcw, FileText, Download, Upload, UserX, CheckC
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
+import useResponsive from '../utils/useResponsive';
 
 export default function ClientDetail() {
+  const { isMobile } = useResponsive();
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -136,45 +138,50 @@ export default function ClientDetail() {
     deleted:  { bg: '#fcebeb', color: '#a32d2d' },
   };
   const sStyle = STATUS_COLOR[client.status] || STATUS_COLOR.inactive;
-
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-        <button onClick={() => navigate('/clients')} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 4, color: '#888' }}><ArrowLeft size={18} /></button>
-        <div style={{ flex: 1 }}>
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#1a1a18' }}>{client.org_name}</h1>
-          <span style={{ fontSize: 12, color: '#888' }}>{client.org_type} · {client.city}, {client.state}</span>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', gap: 12, marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
+          <button onClick={() => navigate('/clients')} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 4, color: '#888' }}><ArrowLeft size={18} /></button>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#1a1a18' }}>{client.org_name}</h1>
+            <span style={{ fontSize: 12, color: '#888' }}>{client.org_type} · {client.city}, {client.state}</span>
+          </div>
+          <span style={{ fontSize: 12, padding: '4px 12px', borderRadius: 20, background: sStyle.bg, color: sStyle.color, fontWeight: 600, textTransform: 'capitalize', marginLeft: 8 }}>
+            {client.status}
+          </span>
         </div>
-        <span style={{ fontSize: 12, padding: '4px 12px', borderRadius: 20, background: sStyle.bg, color: sStyle.color, fontWeight: 600, textTransform: 'capitalize' }}>
-          {client.status}
-        </span>
 
         {/* Admin/Manager Actions */}
-        {isManager && client.status === 'active' && (
-          <button
-            onClick={() => setShowOffboardModal(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: '#fff3cd', color: '#856404', border: '1px solid #ffeeba', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-          >
-            <UserX size={13} /> Offboard Client
-          </button>
-        )}
-        {isAdmin && client.status !== 'deleted' && (
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: '#fcebeb', color: '#a32d2d', border: '1px solid #f5c6c6', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-          >
-            <Trash2 size={13} /> Delete Client
-          </button>
-        )}
-        {isAdmin && client.status === 'deleted' && (
-          <button
-            onClick={handleRestore}
-            disabled={actionLoading}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: '#eaf3de', color: '#3b6d11', border: '1px solid #b7dfad', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: actionLoading ? 'not-allowed' : 'pointer' }}
-          >
-            <RotateCcw size={13} /> {actionLoading ? 'Restoring…' : 'Restore Client'}
-          </button>
+        {(isManager || isAdmin) && (
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: isMobile ? 12 : 0 }}>
+            {isManager && client.status === 'active' && (
+              <button
+                onClick={() => setShowOffboardModal(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: '#fff3cd', color: '#856404', border: '1px solid #ffeeba', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', flex: isMobile ? 1 : 'none', justifyContent: 'center' }}
+              >
+                <UserX size={13} /> Offboard Client
+              </button>
+            )}
+            {isAdmin && client.status !== 'deleted' && (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: '#fcebeb', color: '#a32d2d', border: '1px solid #f5c6c6', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', flex: isMobile ? 1 : 'none', justifyContent: 'center' }}
+              >
+                <Trash2 size={13} /> Delete Client
+              </button>
+            )}
+            {isAdmin && client.status === 'deleted' && (
+              <button
+                onClick={handleRestore}
+                disabled={actionLoading}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: '#eaf3de', color: '#3b6d11', border: '1px solid #b7dfad', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: actionLoading ? 'not-allowed' : 'pointer', flex: isMobile ? 1 : 'none', justifyContent: 'center' }}
+              >
+                <RotateCcw size={13} /> {actionLoading ? 'Restoring…' : 'Restore Client'}
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -189,7 +196,7 @@ export default function ClientDetail() {
       )}
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e8e6e0', marginBottom: 20 }}>
+      <div className="res-tabs-scroll" style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e8e6e0', marginBottom: 20 }}>
         {tabs.map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
             padding: '8px 16px', border: 'none', borderBottom: tab === t ? '2px solid #2d9d78' : '2px solid transparent',
@@ -201,7 +208,7 @@ export default function ClientDetail() {
 
       {/* Overview Tab */}
       {tab === 'overview' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
           <div style={{ background: '#fff', border: '1px solid #e8e6e0', borderRadius: 12, padding: 20 }}>
             <h3 style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 600, color: '#444' }}>Organization Details</h3>
             {[
@@ -412,7 +419,7 @@ export default function ClientDetail() {
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
-          <div style={{ background: '#fff', borderRadius: 16, width: 420, padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ background: '#fff', borderRadius: 16, width: isMobile ? '95%' : 420, padding: isMobile ? 20 : 28, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
               <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#fcebeb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Trash2 size={20} color="#a32d2d" />
@@ -447,7 +454,7 @@ export default function ClientDetail() {
       {/* Offboard Confirmation Modal */}
       {showOffboardModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
-          <div style={{ background: '#fff', borderRadius: 16, width: 420, padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ background: '#fff', borderRadius: 16, width: isMobile ? '95%' : 420, padding: isMobile ? 20 : 28, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
               <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#fff3cd', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <UserX size={20} color="#856404" />

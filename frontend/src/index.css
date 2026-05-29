@@ -1,0 +1,193 @@
+/* src/index.css */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f8f7f4;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom Scrollbar Styles */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.custom-sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+}
+.custom-sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Mobile Responsive Utility Rules (Overrides Inline Grid Styles) */
+@media (max-width: 768px) {
+  /* Grid conversions to single columns */
+  .res-grid-2 {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  .res-grid-3 {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  .res-grid-4 {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  .res-grid-split {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  .res-grid-split {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  /* Flex Layout Row -> Column */
+  .res-flex-row-to-col {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+
+  /* Responsive Modals */
+  .res-modal {
+    width: 95vw !important;
+    max-width: 100% !important;
+    max-height: 92vh !important;
+    margin: 10px !important;
+    padding: 18px 16px !important;
+  }
+
+  /* Horizontal Overflow Scroll for Tables and Tabs */
+  .res-table-container {
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .res-tabs-scroll {
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    display: flex !important;
+    gap: 8px !important;
+    -webkit-overflow-scrolling: touch;
+    border-bottom: 1px solid #e8e6e0;
+    padding-bottom: 4px;
+  }
+  .res-tabs-scroll::-webkit-scrollbar {
+    display: none !important;
+  }
+  .res-tabs-scroll > button, .res-tabs-scroll > a {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+  }
+
+  /* Hide Elements on Mobile */
+  .res-hide-mobile {
+    display: none !important;
+  }
+
+  /* Hide text labels on extra-small screens */
+  .res-hide-xs {
+    display: none !important;
+  }
+
+  /* Scale Padding/Font-Sizes on Mobile */
+  .res-header-card {
+    padding: 20px 16px !important;
+    margin-bottom: 16px !important;
+  }
+  .res-header-card h1 {
+    font-size: 22px !important;
+  }
+
+  /* 4-col grid -> 2-col on mobile */
+  .res-grid-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  /* Form grids: stack to single column */
+  .res-form-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* Invoice item rows: stack vertically */
+  .res-invoice-header {
+    display: none !important;
+  }
+  .res-invoice-row {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+    padding: 12px;
+    background: #f9f9f7;
+    border-radius: 8px;
+    margin-bottom: 10px !important;
+  }
+
+  /* Page header wrapping */
+  .res-page-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+
+  /* Responsive action button row */
+  .res-btn-row {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  /* Cards container: stack on mobile */
+  .res-cards-stack > div {
+    width: 100% !important;
+  }
+
+  /* Filters row: stack on small screens */
+  .res-filters {
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+  .res-filters > div,
+  .res-filters > select,
+  .res-filters > input {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+/* Tablet breakpoint */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .res-grid-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .res-grid-split {
+    grid-template-columns: 2fr 1fr !important;
+  }
+}
+
+/* Default desktop for res-grid-split */
+.res-grid-split {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+}

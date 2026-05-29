@@ -19,9 +19,13 @@ const taskSchema = Joi.object({
   notes: Joi.string().allow('', null)
 });
 
+const taskUpdateSchema = taskSchema.fork(['title'], (schema) => schema.optional());
+
 const validateTask = (req, res, next) => {
-  const { error } = taskSchema.validate(req.body, { allowUnknown: true });
+  const schema = req.method === 'PATCH' ? taskUpdateSchema : taskSchema;
+  const { error, value } = schema.validate(req.body, { stripUnknown: true });
   if (error) return res.status(400).json({ error: error.details[0].message });
+  req.body = value;
   next();
 };
 

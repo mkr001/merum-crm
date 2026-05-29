@@ -39,10 +39,10 @@ function ContractModal({ contract, clients, onClose, onSave }) {
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ background: '#fff', borderRadius: 16, width: 540, maxHeight: '90vh', overflowY: 'auto', padding: 28 }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '12px' }}>
+      <div className="res-modal" style={{ background: '#fff', borderRadius: 16, width: 540, maxHeight: '90vh', overflowY: 'auto', padding: 28 }}>
         <h2 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 700 }}>{form.id ? 'Edit Contract' : 'New Contract / Proposal'}</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div className="res-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <div style={{ gridColumn: '1/-1' }}>
             <label style={labelStyle}>Title *</label>
             <input style={inputStyle} value={form.title || ''} onChange={e => set('title', e.target.value)} placeholder="e.g. Annual Compliance Agreement" />
@@ -131,7 +131,7 @@ export default function Contracts() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+      <div className="res-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1a1a18' }}>Contracts & Proposals</h1>
           <p style={{ margin: '3px 0 0', fontSize: 13, color: '#888' }}>{contracts.length} records</p>
@@ -142,7 +142,7 @@ export default function Contracts() {
       </div>
 
       {/* Status Tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
+      <div className="res-tabs-scroll" style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
         {['', ...STATUSES].map((s, i) => (
           <button key={i} onClick={() => setFilterStatus(s)}
             style={{ padding: '7px 16px', borderRadius: 20, border: '1px solid', cursor: 'pointer', fontSize: 12, fontWeight: 500, textTransform: 'capitalize',
@@ -156,7 +156,7 @@ export default function Contracts() {
       </div>
 
       {/* Table */}
-      <div style={{ background: '#fff', border: '1px solid #e8e6e0', borderRadius: 12, overflow: 'hidden' }}>
+      <div className="res-table-container" style={{ background: '#fff', border: '1px solid #e8e6e0', borderRadius: 12, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ background: '#f8f7f4', borderBottom: '1px solid #e8e6e0' }}>

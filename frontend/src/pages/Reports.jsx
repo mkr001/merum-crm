@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import api from '../utils/api';
+import useResponsive from '../utils/useResponsive';
 
 const COLORS = ['#2d9d78', '#3b8bd4', '#ef9f27', '#534ab7', '#a32d2d', '#888'];
 
 export default function Reports() {
+  const { isMobile } = useResponsive();
   const [loading, setLoading] = useState(true);
   const [pipelineData, setPipelineData] = useState([]);
   const [clientTypes, setClientTypes] = useState([]);
@@ -50,20 +52,20 @@ export default function Reports() {
   }, []);
 
   return (
-    <div style={{ background: '#fcfcfc', minHeight: '100vh', padding: 20 }}>
+    <div style={{ background: '#fcfcfc', minHeight: '100vh', padding: isMobile ? 12 : 20 }}>
       {/* Header */}
-      <div style={{ 
+      <div className="res-header-card" style={{ 
         background: 'linear-gradient(135deg, #2d9d78 0%, #157347 100%)',
-        borderRadius: 16, padding: '32px', marginBottom: 28, color: '#fff' 
+        borderRadius: 16, padding: isMobile ? '20px' : '32px', marginBottom: isMobile ? 20 : 28, color: '#fff' 
       }}>
-        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>Reports & Analytics</h1>
-        <p style={{ margin: '8px 0 0', opacity: 0.8, fontSize: 15 }}>Deep insights into your business performance.</p>
+        <h1 style={{ margin: 0, fontSize: isMobile ? 22 : 28, fontWeight: 700 }}>Reports & Analytics</h1>
+        <p style={{ margin: '8px 0 0', opacity: 0.8, fontSize: isMobile ? 13 : 15 }}>Deep insights into your business performance.</p>
       </div>
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: 40, color: '#aaa' }}>Loading reports data...</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+        <div className="res-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
           {/* Revenue Chart */}
           <div style={{ background: '#fff', padding: 24, borderRadius: 16, border: '1px solid #e8e6e0' }}>
             <h3 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 700 }}>Revenue Trends</h3>

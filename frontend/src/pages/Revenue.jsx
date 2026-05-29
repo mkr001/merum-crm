@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { IndianRupee, TrendingUp, AlertTriangle, CheckCircle } from 'lucide-react';
 import api from '../utils/api';
+import useResponsive from '../utils/useResponsive';
 
 const COLORS = ['#2d9d78', '#3b8bd4', '#ef9f27', '#e24b4a', '#534ab7', '#888'];
 
@@ -21,6 +22,7 @@ function KpiCard({ icon: Icon, label, value, color, bg }) {
 }
 
 export default function Revenue() {
+  const { isMobile } = useResponsive();
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -66,8 +68,8 @@ export default function Revenue() {
   if (loading) {
     return (
       <div>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a18', marginBottom: 20 }}>Revenue & Collections</h1>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+        <h1 style={{ fontSize: isMobile ? 20 : 22, fontWeight: 700, color: '#1a1a18', marginBottom: 20 }}>Revenue & Collections</h1>
+        <div className="res-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} style={{ background: '#fff', border: '1px solid #e8e6e0', borderRadius: 12, padding: 20, height: 70 }}>
               <div style={{ height: 12, width: '40%', background: '#f5f5f5', borderRadius: 4, marginBottom: 10 }} />
@@ -81,10 +83,10 @@ export default function Revenue() {
 
   return (
     <div>
-      <h1 style={{ margin: '0 0 20px', fontSize: 22, fontWeight: 700, color: '#1a1a18' }}>Revenue & Collections</h1>
+      <h1 style={{ margin: '0 0 20px', fontSize: isMobile ? 20 : 22, fontWeight: 700, color: '#1a1a18' }}>Revenue & Collections</h1>
 
       {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 24 }}>
+      <div className="res-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 24 }}>
         <KpiCard icon={IndianRupee} label="Total Billed" value={fmt(totalRevenue)} color="#2d9d78" bg="#e1f5ee" />
         <KpiCard icon={CheckCircle} label="Collected" value={fmt(collected)} color="#3b8bd4" bg="#e6f1fb" />
         <KpiCard icon={TrendingUp} label="Outstanding" value={fmt(outstanding)} color="#ef9f27" bg="#faeeda" />
@@ -92,7 +94,7 @@ export default function Revenue() {
       </div>
 
       {/* Charts Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, marginBottom: 24 }}>
+      <div className="res-grid-split" style={{ marginBottom: 24 }}>
         {/* Monthly Billed vs Collected */}
         <div style={{ background: '#fff', border: '1px solid #e8e6e0', borderRadius: 12, padding: 20 }}>
           <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 600 }}>Monthly Billed vs Collected</h3>

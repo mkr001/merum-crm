@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Plus, CheckCircle, Circle, Clock, AlertCircle } from 'lucide-react';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
+import useResponsive from '../utils/useResponsive';
 
 const PRIORITIES = ['low', 'medium', 'high'];
 const TYPES      = ['follow_up', 'meeting', 'call', 'document', 'review', 'other'];
@@ -11,6 +12,7 @@ const PRIORITY_COLOR = { low: '#3b8bd4', medium: '#ef9f27', high: '#e24b4a' };
 function TaskModal({ task, users, onClose, onSave }) {
   const [form, setForm] = useState(task || { status: 'open', priority: 'medium', task_type: 'follow_up' });
   const [saving, setSaving] = useState(false);
+  const isCustomType = form.task_type && !TYPES.includes(form.task_type) || form.task_type === 'other';
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const inputStyle = { width: '100%', padding: '9px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', outline: 'none' };
   const labelStyle = { display: 'block', fontSize: 12, fontWeight: 500, color: '#555', marginBottom: 5 };
@@ -19,28 +21,37 @@ function TaskModal({ task, users, onClose, onSave }) {
     if (!form.title) return toast.error('Title is required');
     setSaving(true);
     try {
+      const payload = { ...form };
+      if (!payload.due_date) payload.due_date = null;
+      if (!payload.assigned_to) payload.assigned_to = null;
+      
       const { data } = form.id
-        ? await api.patch(`/tasks/${form.id}`, form)
-        : await api.post('/tasks', form);
+        ? await api.patch(`/tasks/${form.id}`, payload)
+        : await api.post('/tasks', payload);
       onSave(data);
       onClose();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to save task');
     } finally { setSaving(false); }
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ background: '#fff', borderRadius: 16, width: 500, padding: 28 }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '12px' }}>
+      <div className="res-modal" style={{ background: '#fff', borderRadius: 16, width: 500, padding: 28 }}>
         <h2 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 700 }}>{form.id ? 'Edit Task' : 'New Task'}</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div className="res-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <div style={{ gridColumn: '1/-1' }}>
             <label style={labelStyle}>Title *</label>
             <input style={inputStyle} value={form.title || ''} onChange={e => set('title', e.target.value)} placeholder="Task title" />
           </div>
           <div>
             <label style={labelStyle}>Type</label>
-            <select style={inputStyle} value={form.task_type || 'follow_up'} onChange={e => set('task_type', e.target.value)}>
+            <select style={inputStyle} value={isCustomType ? 'other' : (form.task_type || 'follow_up')} onChange={e => set('task_type', e.target.value === 'other' ? 'other' : e.target.value)}>
               {TYPES.map(t => <option key={t} value={t}>{t.replace('_', ' ')}</option>)}
             </select>
+            {isCustomType && (
+              <input style={{...inputStyle, marginTop: 8}} value={form.task_type === 'other' ? '' : form.task_type} onChange={e => set('task_type', e.target.value)} placeholder="Specify custom type..." autoFocus />
+            )}
           </div>
           <div>
             <label style={labelStyle}>Priority</label>
@@ -116,7 +127,7 @@ export default function Tasks() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+      <div className="res-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1a1a18' }}>Tasks</h1>
           <p style={{ margin: '3px 0 0', fontSize: 13, color: '#888' }}>{tasks.length} tasks</p>
@@ -127,10 +138,10 @@ export default function Tasks() {
       </div>
 
       {/* Status Tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+      <div className="res-tabs-scroll" style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
         {['open', 'in_progress', 'completed', ''].map((s, i) => (
           <button key={i} onClick={() => setFilterStatus(s)}
-            style={{ padding: '7px 16px', borderRadius: 20, border: '1px solid', cursor: 'pointer', fontSize: 12, fontWeight: 500,
+            style={{ padding: '7px 16px', borderRadius: 20, border: '1px solid', cursor: 'pointer', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap',
               borderColor: filterStatus === s ? '#2d9d78' : '#ddd',
               background: filterStatus === s ? '#e1f5ee' : '#fff',
               color: filterStatus === s ? '#0f6e56' : '#666'
@@ -179,6 +190,9 @@ export default function Tasks() {
                 <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, fontWeight: 500, textTransform: 'capitalize',
                   background: PRIORITY_COLOR[task.priority] + '20', color: PRIORITY_COLOR[task.priority] }}>
                   {task.priority}
+                </span>
+                <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, fontWeight: 500, background: '#f5f5f5', color: '#666' }}>
+                  {(task.task_type || 'task').replace('_', ' ')}
                 </span>
                 {isOverdue(task) && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, background: '#fcebeb', color: '#a32d2d', fontWeight: 500 }}>Overdue</span>}
               </div>

@@ -1,10 +1,12 @@
 // src/pages/Invoices.jsx
-import { useEffect, useState } from 'react';
-import { Plus, Printer, Download, Eye, IndianRupee, FileText, X, Trash2, Upload, Edit2 } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import { Plus, Printer, Download, Eye, IndianRupee, FileText, X, Trash2, Upload, Edit2, Search, ArrowRight } from 'lucide-react';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import html2pdf from 'html2pdf.js';
+import useResponsive from '../utils/useResponsive';
+import { useAuth } from '../context/AuthContext';
 
 const STATUS_STYLE = {
   draft:    { bg: '#f8f7f4', color: '#888' },
@@ -491,8 +493,8 @@ function CreateInvoiceModal({ onClose, onSave }) {
   const labelStyle = { display: 'block', fontSize: 12, fontWeight: 600, color: '#555', marginBottom: 5 };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, overflowY: 'auto', padding: '20px' }}>
-      <div style={{ background: '#fff', borderRadius: 16, width: 680, padding: 28, marginTop: 20 }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, overflowY: 'auto', padding: '20px 12px' }}>
+      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 680, padding: '24px 20px', marginTop: 20 }}>
         <h2 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 700, color: '#1a1a18' }}>Create New Invoice</h2>
 
         {/* Client & Dates */}
@@ -526,15 +528,15 @@ function CreateInvoiceModal({ onClose, onSave }) {
             </button>
           </div>
 
-          {/* Items Header */}
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.2fr 32px', gap: 6, marginBottom: 6 }}>
+          {/* Items Header - hidden on mobile */}
+          <div className="res-invoice-header" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.2fr 32px', gap: 6, marginBottom: 6 }}>
             {['Description', 'Qty', 'Unit Price (₹)', ''].map(h => (
               <div key={h} style={{ fontSize: 11, fontWeight: 600, color: '#888' }}>{h}</div>
             ))}
           </div>
 
           {items.map((item, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.2fr 32px', gap: 6, marginBottom: 6 }}>
+            <div key={i} className="res-invoice-row" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.2fr 32px', gap: 6, marginBottom: 6 }}>
               <div>
                 {services.length > 0 && (
                   <select style={{ ...inputStyle, marginBottom: 4, fontSize: 11, padding: '6px 8px', color: '#888' }}
@@ -789,9 +791,13 @@ function BulkUploadModal({ onClose, onSave }) {
 
 // ── Main Invoices Page ─────────────────────────────────────────
 export default function Invoices() {
+  const { isMobile } = useResponsive();
+  const { user } = useAuth();
+  const isClient = user?.role === 'client';
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [createModal, setCreateModal] = useState(false);
@@ -803,11 +809,21 @@ export default function Invoices() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
 
+  const filteredInvoices = useMemo(() => {
+    if (!searchQuery.trim()) return invoices;
+    const q = searchQuery.toLowerCase();
+    return invoices.filter(inv =>
+      (inv.invoice_number || '').toLowerCase().includes(q) ||
+      (inv.clients?.org_name || '').toLowerCase().includes(q) ||
+      (inv.status || '').toLowerCase().includes(q)
+    );
+  }, [invoices, searchQuery]);
+
   const toggleSelectAll = () => {
-    if (selectedIds.length === invoices.length) {
+    if (selectedIds.length === filteredInvoices.length && filteredInvoices.length > 0) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(invoices.map(inv => inv.id));
+      setSelectedIds(filteredInvoices.map(inv => inv.id));
     }
   };
 
@@ -831,6 +847,18 @@ export default function Invoices() {
     }
   };
 
+  const handleBulkStatusUpdate = async (status) => {
+    if (!window.confirm(`Are you sure you want to mark ${selectedIds.length} invoices as ${status}?`)) return;
+    try {
+      await Promise.all(selectedIds.map(id => api.patch(`/invoices/${id}`, { status })));
+      toast.success(`Invoices marked as ${status}`);
+      setSelectedIds([]);
+      fetchInvoices();
+    } catch {
+      toast.error('Failed to update invoice statuses');
+    }
+  };
+
   const handleDeleteInvoice = async (id) => {
     if (!window.confirm('Are you sure you want to delete this invoice?')) return;
     try {
@@ -843,8 +871,8 @@ export default function Invoices() {
   };
 
   const handleBulkDownloadExcel = () => {
-    if (invoices.length === 0) return toast.error('No invoices to download');
-    const dataToExport = invoices.map(inv => ({
+    if (filteredInvoices.length === 0) return toast.error('No invoices to download');
+    const dataToExport = filteredInvoices.map(inv => ({
       'Invoice Number': inv.invoice_number,
       'Client Name': inv.clients?.org_name || '',
       'Issue Date': inv.issue_date,
@@ -859,10 +887,11 @@ export default function Invoices() {
   };
 
   const handleBulkDownloadPDF = async () => {
-    if (invoices.length === 0) return toast.error('No invoices to print');
+    const toPrint = selectedIds.length > 0 ? filteredInvoices.filter(i => selectedIds.includes(i.id)) : filteredInvoices;
+    if (toPrint.length === 0) return toast.error('No invoices to print');
     toast.loading('Fetching full invoices...', { id: 'pdf' });
     try {
-      const fullInvoices = await Promise.all(invoices.map(inv => api.get(`/invoices/${inv.id}`).then(res => res.data)));
+      const fullInvoices = await Promise.all(toPrint.map(inv => api.get(`/invoices/${inv.id}`).then(res => res.data)));
       setBulkPdfInvoices(fullInvoices);
       toast.success('Ready to print!', { id: 'pdf' });
     } catch {
@@ -898,43 +927,66 @@ export default function Invoices() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1a1a18' }}>Invoices</h1>
-          <p style={{ margin: '3px 0 0', fontSize: 13, color: '#888' }}>{invoices.length} invoices</p>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1a1a18' }}>{isClient ? 'My Invoices' : 'Invoices'}</h1>
+          <p style={{ margin: '3px 0 0', fontSize: 13, color: '#888' }}>{filteredInvoices.length} invoices</p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          {selectedIds.length > 0 && (
-            <button onClick={handleDeleteSelected} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', background: '#fcebeb', color: '#a32d2d', border: '1px solid #f5c6c6', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              <Trash2 size={16} /> Delete Selected ({selectedIds.length})
-            </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {!isClient && selectedIds.length > 0 && (
+            <>
+              <button onClick={() => handleBulkStatusUpdate('draft')} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', background: '#f8f7f4', color: '#666', border: '1px solid #ddd', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                <Edit2 size={14} /> Draft
+              </button>
+              <button onClick={() => handleBulkStatusUpdate('sent')} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', background: '#eeedfe', color: '#534ab7', border: '1px solid #d4d1f9', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                <ArrowRight size={14} /> Sent
+              </button>
+              <button onClick={() => handleBulkStatusUpdate('paid')} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', background: '#eaf3de', color: '#3b6d11', border: '1px solid #cce8af', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                <IndianRupee size={14} /> Paid
+              </button>
+              <button onClick={handleDeleteSelected} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', background: '#fcebeb', color: '#a32d2d', border: '1px solid #f5c6c6', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                <Trash2 size={14} /> Delete
+              </button>
+            </>
           )}
-          <div style={{ position: 'relative' }}>
-            <button onClick={() => setShowDownloadMenu(!showDownloadMenu)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', background: '#f5f5f5', color: '#333', border: '1px solid #ddd', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              <Download size={16} /> Bulk Download
-            </button>
-            {showDownloadMenu && (
-              <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 5, background: '#fff', border: '1px solid #ddd', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 10, width: 200 }}>
-                <button onClick={() => { setShowDownloadMenu(false); handleBulkDownloadExcel(); }} style={{ display: 'block', width: '100%', padding: '10px 16px', background: 'none', border: 'none', borderBottom: '1px solid #eee', textAlign: 'left', cursor: 'pointer', fontSize: 13, color: '#333' }}>
-                  Excel (.xlsx)
+          {!isClient && (
+            <>
+              <div style={{ position: 'relative' }}>
+                <button onClick={() => setShowDownloadMenu(!showDownloadMenu)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', background: '#f5f5f5', color: '#333', border: '1px solid #ddd', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  <Download size={16} /> <span className="res-hide-xs">Bulk </span>Download
                 </button>
-                <button onClick={() => { setShowDownloadMenu(false); handleBulkDownloadPDF(); }} style={{ display: 'block', width: '100%', padding: '10px 16px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: 13, color: '#333' }}>
-                  PDF (All Invoices)
-                </button>
+                {showDownloadMenu && (
+                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 5, background: '#fff', border: '1px solid #ddd', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 10, width: 200 }}>
+                    <button onClick={() => { setShowDownloadMenu(false); handleBulkDownloadExcel(); }} style={{ display: 'block', width: '100%', padding: '10px 16px', background: 'none', border: 'none', borderBottom: '1px solid #eee', textAlign: 'left', cursor: 'pointer', fontSize: 13, color: '#333' }}>
+                      Excel (.xlsx)
+                    </button>
+                    <button onClick={() => { setShowDownloadMenu(false); handleBulkDownloadPDF(); }} style={{ display: 'block', width: '100%', padding: '10px 16px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: 13, color: '#333' }}>
+                      PDF (All Invoices)
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <button onClick={() => setBulkModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', background: '#fff', color: '#333', border: '1px solid #ddd', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            <Upload size={16} /> Bulk Upload
-          </button>
-          <button onClick={() => setCreateModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', background: '#2d9d78', color: '#fff', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            <Plus size={16} /> Create Invoice
-          </button>
+              <button onClick={() => setBulkModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', background: '#fff', color: '#333', border: '1px solid #ddd', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                <Upload size={16} /> <span className="res-hide-xs">Bulk </span>Upload
+              </button>
+              <button onClick={() => setCreateModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', background: '#2d9d78', color: '#fff', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                <Plus size={16} /> Create
+              </button>
+            </>
+          )}
         </div>
       </div>
 
+      {/* Client info banner */}
+      {isClient && (
+        <div style={{ background: 'linear-gradient(135deg, #eeedfe 0%, #e6e4fd 100%)', border: '1px solid #d4d1f9', borderRadius: 12, padding: '14px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <IndianRupee size={18} color="#534ab7" />
+          <span style={{ fontSize: 13, color: '#534ab7', fontWeight: 500 }}>View your invoices and download PDF copies. For payment queries, raise a support ticket.</span>
+        </div>
+      )}
+
       {/* Summary Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 22 }}>
+      <div className="res-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 22 }}>
         {[
           ['💰 Collected', totalPaid, '#2d9d78', '#e1f5ee'],
           ['📤 Pending', totalPending, '#534ab7', '#eeedfe'],
@@ -949,52 +1001,73 @@ export default function Invoices() {
       </div>
 
       {/* Status Tabs & Filters */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 18, alignItems: 'center' }}>
-        {[['', 'All'], ['draft', 'Draft'], ['sent', 'Sent'], ['paid', 'Paid'], ['overdue', 'Overdue']].map(([s, label]) => (
-          <button key={s} onClick={() => setFilterStatus(s)}
-            style={{ padding: '7px 16px', borderRadius: 20, border: '1px solid', cursor: 'pointer', fontSize: 12, fontWeight: 500,
-              borderColor: filterStatus === s ? '#2d9d78' : '#ddd',
-              background: filterStatus === s ? '#e1f5ee' : '#fff',
-              color: filterStatus === s ? '#0f6e56' : '#666'
-            }}>{label}
-          </button>
-        ))}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ marginBottom: 18 }}>
+        <div className="res-tabs-scroll" style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center' }}>
+          {[['', 'All'], ['draft', 'Draft'], ['sent', 'Sent'], ['paid', 'Paid'], ['overdue', 'Overdue']].map(([s, label]) => (
+            <button key={s} onClick={() => setFilterStatus(s)}
+              style={{ padding: '7px 16px', borderRadius: 20, border: '1px solid', cursor: 'pointer', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap',
+                borderColor: filterStatus === s ? '#2d9d78' : '#ddd',
+                background: filterStatus === s ? '#e1f5ee' : '#fff',
+                color: filterStatus === s ? '#0f6e56' : '#666'
+              }}>{label}
+            </button>
+          ))}
+        </div>
+        
+        {/* Search & Dates Row */}
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
+            <Search size={15} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: '#aaa' }} />
+            <input
+              type="text"
+              placeholder="Search invoices by number or client..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              style={{ width: '100%', padding: '9px 14px 9px 36px', border: '1px solid #e0ddd8', borderRadius: 10, fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' }}
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#aaa', display: 'flex', alignItems: 'center' }}>
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 12, color: '#666', fontWeight: 500 }}>From:</span>
-            <input type="date" style={{ padding: '7px 12px', borderRadius: 20, border: '1px solid #ddd', fontSize: 12 }} 
+            <input type="date" style={{ padding: '7px 12px', borderRadius: 20, border: '1px solid #ddd', fontSize: 12, flex: 1, minWidth: 130 }} 
                 value={startDate} onChange={e => setStartDate(e.target.value)} />
             <span style={{ fontSize: 12, color: '#666', fontWeight: 500 }}>To:</span>
-            <input type="date" style={{ padding: '7px 12px', borderRadius: 20, border: '1px solid #ddd', fontSize: 12 }} 
+            <input type="date" style={{ padding: '7px 12px', borderRadius: 20, border: '1px solid #ddd', fontSize: 12, width: 130 }} 
                 value={endDate} onChange={e => setEndDate(e.target.value)} />
+          </div>
         </div>
       </div>
 
       {/* Table */}
-      <div style={{ background: '#fff', border: '1px solid #e8e6e0', borderRadius: 12, overflow: 'hidden' }}>
+      <div className="res-table-container" style={{ background: '#fff', border: '1px solid #e8e6e0', borderRadius: 12, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ background: '#f8f7f4', borderBottom: '1px solid #e8e6e0' }}>
-              <th style={{ padding: '11px 14px', textAlign: 'left' }}><input type="checkbox" checked={selectedIds.length === invoices.length && invoices.length > 0} onChange={toggleSelectAll} /></th>
-              {['Invoice #', 'Client', 'Issue Date', 'Due Date', 'Amount', 'Status', 'Actions'].map(h => (
+              {!isClient && <th style={{ padding: '11px 14px', textAlign: 'left' }}><input type="checkbox" checked={selectedIds.length === filteredInvoices.length && filteredInvoices.length > 0} onChange={toggleSelectAll} /></th>}
+              {['Invoice #', ...(isClient ? [] : ['Client']), 'Issue Date', 'Due Date', 'Amount', 'Status', 'Actions'].map(h => (
                 <th key={h} style={{ padding: '11px 14px', textAlign: 'left', fontWeight: 600, color: '#555', fontSize: 12 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: '#aaa' }}>Loading…</td></tr>
-            ) : invoices.length === 0 ? (
-              <tr><td colSpan={8} style={{ textAlign: 'center', padding: 50, color: '#aaa' }}>
+              <tr><td colSpan={isClient ? 7 : 8} style={{ textAlign: 'center', padding: 40, color: '#aaa' }}>Loading…</td></tr>
+            ) : filteredInvoices.length === 0 ? (
+              <tr><td colSpan={isClient ? 7 : 8} style={{ textAlign: 'center', padding: 50, color: '#aaa' }}>
                 <FileText size={32} style={{ margin: '0 auto 10px', display: 'block', opacity: 0.3 }} />
                 No invoices found
               </td></tr>
-            ) : invoices.map(inv => {
+            ) : filteredInvoices.map(inv => {
               const s = STATUS_STYLE[inv.status] || STATUS_STYLE.draft;
               return (
                 <tr key={inv.id} style={{ borderBottom: '1px solid #f0ede8' }}>
-                  <td style={{ padding: '12px 14px' }}><input type="checkbox" checked={selectedIds.includes(inv.id)} onChange={() => toggleSelectInvoice(inv.id)} /></td>
+                  {!isClient && <td style={{ padding: '12px 14px' }}><input type="checkbox" checked={selectedIds.includes(inv.id)} onChange={() => toggleSelectInvoice(inv.id)} /></td>}
                   <td style={{ padding: '12px 14px', fontWeight: 600, color: '#185fa5' }}>{inv.invoice_number}</td>
-                  <td style={{ padding: '12px 14px', color: '#333', fontWeight: 500 }}>{inv.clients?.org_name || '—'}</td>
+                  {!isClient && <td style={{ padding: '12px 14px', color: '#333', fontWeight: 500 }}>{inv.clients?.org_name || '—'}</td>}
                   <td style={{ padding: '12px 14px', color: '#666', fontSize: 12 }}>
                     {inv.issue_date ? new Date(inv.issue_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                   </td>
@@ -1009,43 +1082,44 @@ export default function Invoices() {
                   </td>
                   <td style={{ padding: '12px 14px' }}>
                     <div style={{ display: 'flex', gap: 6 }}>
-                      {/* View & Print */}
+                      {/* View & Print — always visible */}
                       <button onClick={() => fetchInvoiceDetail(inv)}
                         title="View & Print"
                         style={{ padding: '5px 10px', border: '1px solid #ddd', borderRadius: 6, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#555' }}>
                         <Eye size={12} /> View
                       </button>
-                      {/* Mark Paid */}
-                      {(inv.status === 'sent' || inv.status === 'overdue') && (
-                        <button onClick={() => setPaidModal(inv)}
-                          title="Mark as Paid"
-                          style={{ padding: '5px 10px', border: '1px solid #2d9d78', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 11, color: '#2d9d78', fontWeight: 600 }}>
-                          Mark Paid
-                        </button>
+                      {/* Admin-only actions */}
+                      {!isClient && (
+                        <>
+                          {(inv.status === 'sent' || inv.status === 'overdue') && (
+                            <button onClick={() => setPaidModal(inv)}
+                              title="Mark as Paid"
+                              style={{ padding: '5px 10px', border: '1px solid #2d9d78', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 11, color: '#2d9d78', fontWeight: 600 }}>
+                              Mark Paid
+                            </button>
+                          )}
+                          {inv.status === 'draft' && (
+                            <button onClick={async () => {
+                              await api.patch(`/invoices/${inv.id}`, { status: 'sent' });
+                              toast.success('Invoice marked as sent!');
+                              fetchInvoices();
+                            }}
+                              style={{ padding: '5px 10px', border: '1px solid #534ab7', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 11, color: '#534ab7', fontWeight: 600 }}>
+                              Mark Sent
+                            </button>
+                          )}
+                          <button onClick={() => setEditModal(inv)}
+                            title="Edit"
+                            style={{ padding: '5px', border: '1px solid #ddd', borderRadius: 6, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#555' }}>
+                            <Edit2 size={12} />
+                          </button>
+                          <button onClick={() => handleDeleteInvoice(inv.id)}
+                            title="Delete"
+                            style={{ padding: '5px', border: '1px solid #f5c6c6', borderRadius: 6, background: '#fcebeb', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#a32d2d' }}>
+                            <Trash2 size={12} />
+                          </button>
+                        </>
                       )}
-                      {/* Send (draft → sent) */}
-                      {inv.status === 'draft' && (
-                        <button onClick={async () => {
-                          await api.patch(`/invoices/${inv.id}`, { status: 'sent' });
-                          toast.success('Invoice marked as sent!');
-                          fetchInvoices();
-                        }}
-                          style={{ padding: '5px 10px', border: '1px solid #534ab7', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 11, color: '#534ab7', fontWeight: 600 }}>
-                          Mark Sent
-                        </button>
-                      )}
-                      {/* Edit */}
-                      <button onClick={() => setEditModal(inv)}
-                        title="Edit"
-                        style={{ padding: '5px', border: '1px solid #ddd', borderRadius: 6, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#555' }}>
-                        <Edit2 size={12} />
-                      </button>
-                      {/* Delete */}
-                      <button onClick={() => handleDeleteInvoice(inv.id)}
-                        title="Delete"
-                        style={{ padding: '5px', border: '1px solid #f5c6c6', borderRadius: 6, background: '#fcebeb', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#a32d2d' }}>
-                        <Trash2 size={12} />
-                      </button>
                     </div>
                   </td>
                 </tr>
@@ -1056,12 +1130,12 @@ export default function Invoices() {
       </div>
 
       {/* Modals */}
-      {createModal && <CreateInvoiceModal onClose={() => setCreateModal(false)} onSave={fetchInvoices} />}
-      {bulkModal && <BulkUploadModal onClose={() => setBulkModal(false)} onSave={fetchInvoices} />}
+      {!isClient && createModal && <CreateInvoiceModal onClose={() => setCreateModal(false)} onSave={fetchInvoices} />}
+      {!isClient && bulkModal && <BulkUploadModal onClose={() => setBulkModal(false)} onSave={fetchInvoices} />}
       {viewInvoice  && <InvoicePrintView invoice={viewInvoice} onClose={() => setViewInvoice(null)} />}
-      {bulkPdfInvoices && <BulkPDFGenerator invoices={bulkPdfInvoices} onClose={() => setBulkPdfInvoices(null)} />}
-      {paidModal    && <MarkPaidModal invoice={paidModal} onClose={() => setPaidModal(null)} onSave={fetchInvoices} />}
-      {editModal    && <EditInvoiceModal invoice={editModal} onClose={() => setEditModal(null)} onSave={fetchInvoices} />}
+      {!isClient && bulkPdfInvoices && <BulkPDFGenerator invoices={bulkPdfInvoices} onClose={() => setBulkPdfInvoices(null)} />}
+      {!isClient && paidModal    && <MarkPaidModal invoice={paidModal} onClose={() => setPaidModal(null)} onSave={fetchInvoices} />}
+      {!isClient && editModal    && <EditInvoiceModal invoice={editModal} onClose={() => setEditModal(null)} onSave={fetchInvoices} />}
     </div>
   );
 }

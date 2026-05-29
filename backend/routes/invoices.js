@@ -10,7 +10,14 @@ router.use(authenticate);
 // JS invoice number generation removed; handled by PostgreSQL default sequence.
 
 router.get('/', asyncHandler(async (req, res) => {
-  const { status, client_id, startDate, endDate, page = 1, limit = 50 } = req.query;
+  let { status, client_id, startDate, endDate, page = 1, limit = 50 } = req.query;
+
+  // Client users can only see their own invoices
+  if (req.user.roles?.name === 'client') {
+    if (!req.user.client_id) return res.json({ data: [], total: 0 });
+    client_id = req.user.client_id;
+  }
+
   let q = supabase.from('invoices').select('*, clients(org_name), invoice_items(*)', { count: 'exact' });
   if (status) q = q.eq('status', status);
   if (client_id) q = q.eq('client_id', client_id);
@@ -29,6 +36,10 @@ router.get('/:id', asyncHandler(async (req, res) => {
   const { data, error } = await supabase.from('invoices')
     .select('*, clients(*), invoice_items(*, services(name))').eq('id', req.params.id).single();
   if (error) return res.status(404).json({ error: 'Not found' });
+  // Client can only view their own invoices
+  if (req.user.roles?.name === 'client' && data.client_id !== req.user.client_id) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
   res.json(data);
 }));
 
@@ -146,14 +157,22 @@ router.post('/bulk', authorize('admin', 'manager', 'accountant'), asyncHandler(a
 }));
 
 router.post('/', authorize('admin', 'manager', 'accountant'), validate(invoiceCreateSchema), asyncHandler(async (req, res) => {
-  const { items = [], ...invoice } = req.validatedBody;
+  const { items = [], invoice_number: _ignored, ...invoice } = req.validatedBody;
   const subtotal = items.reduce((s, i) => s + (i.quantity * i.unit_price), 0);
   const tax_amount = subtotal * (invoice.tax_rate || 18) / 100;
   const total_amount = subtotal + tax_amount;
 
+  // Generate invoice number in Node.js (DB DEFAULT not reliable through Supabase/PostgREST)
+  const now = new Date();
+  const yyyymm = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const { count: totalCount } = await supabase.from('invoices').select('id', { count: 'exact', head: true });
+  const seq = String((totalCount || 0) + 1).padStart(4, '0');
+  const invoice_number = `MRM-${yyyymm}-${seq}`;
+
   const { data: inv, error } = await supabase.from('invoices').insert([{
     ...invoice, subtotal, tax_amount, total_amount,
-    generated_by: req.user.id
+    generated_by: req.user.id,
+    invoice_number
   }]).select().single();
 
   if (error) return res.status(500).json({ error: error.message });
@@ -220,6 +239,17 @@ router.post('/delete-batch', authorize('admin', 'manager', 'accountant'), asyncH
 
   if (error) return res.status(500).json({ error: error.message });
   res.json({ message: 'Invoices deleted successfully', count: ids.length });
+}));
+
+router.post('/bulk-update', authorize('admin', 'manager', 'accountant'), asyncHandler(async (req, res) => {
+  const { ids, updates } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Invalid IDs' });
+
+  const payload = { ...updates, updated_at: new Date() };
+
+  const { error } = await supabase.from('invoices').update(payload).in('id', ids);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ message: 'Invoices updated successfully' });
 }));
 
 module.exports = router;

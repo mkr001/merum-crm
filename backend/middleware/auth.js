@@ -16,6 +16,19 @@ const authenticate = async (req, res, next) => {
       .single();
 
     if (error || !user) return res.status(401).json({ error: 'Invalid token' });
+    
+    // Resolve client_id if user is a client
+    if (user.roles?.name === 'client' && user.email) {
+      const { data: contact } = await supabase
+        .from('contacts')
+        .select('client_id')
+        .eq('email', user.email)
+        .single();
+      if (contact && contact.client_id) {
+        user.client_id = contact.client_id;
+      }
+    }
+
     req.user = user;
     next();
   } catch {

@@ -85,7 +85,7 @@ const invoiceCreateSchema = Joi.object({
     quantity: Joi.number().min(0).default(1),
     unit_price: Joi.number().precision(2).min(0).required()
   })).default([])
-}).options({ allowUnknown: true });
+}).options({ stripUnknown: true });
 
 // ── Contracts ───────────────────────────────────────────────────
 const contractCreateSchema = Joi.object({

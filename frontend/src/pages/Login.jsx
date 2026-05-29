@@ -30,7 +30,7 @@ export default function Login() {
       minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: '#f8f7f4', fontFamily: 'system-ui, sans-serif'
     }}>
-      <div style={{ width: 400 }}>
+      <div style={{ width: '90vw', maxWidth: 400 }}>
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 36 }}>
           <img 
