@@ -1,13 +1,14 @@
 // src/components/Layout.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import useResponsive from '../utils/useResponsive';
+import api from '../utils/api';
 import {
   LayoutDashboard, Users, UserCheck, CheckSquare, Calendar,
   FileText, FolderOpen, BarChart2, HeartHandshake, Settings,
   LogOut, Menu, X, Bell, Building2, Shield, Contact,
-  Ticket, IndianRupee, BarChart3, FileSignature
+  Ticket, IndianRupee, BarChart3, FileSignature, CheckCheck
 } from 'lucide-react';
 
 // ── Role-based nav config ──────────────────────────────────────
@@ -47,16 +48,78 @@ export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
+  // ── Notifications state ────────────────────────────────────────
+  const [notifications, setNotifications]   = useState([]);
+  const [unreadCount, setUnreadCount]       = useState(0);
+  const [showNotif, setShowNotif]           = useState(false);
+  const [notifLoading, setNotifLoading]     = useState(false);
+  const notifRef = useRef(null);
+
+  const fetchUnreadCount = useCallback(async () => {
+    try {
+      const { data } = await api.get('/notifications/unread-count');
+      setUnreadCount(data.count || 0);
+    } catch { /* silent — non-critical */ }
+  }, []);
+
+  const fetchNotifications = useCallback(async () => {
+    setNotifLoading(true);
+    try {
+      const { data } = await api.get('/notifications');
+      setNotifications(data.data || []);
+    } catch { /* silent */ } finally { setNotifLoading(false); }
+  }, []);
+
+  const markAllRead = async () => {
+    try {
+      await api.patch('/notifications/read-all');
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      setUnreadCount(0);
+    } catch { /* silent */ }
+  };
+
+  const markOneRead = async (id) => {
+    try {
+      await api.patch(`/notifications/${id}/read`);
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch { /* silent */ }
+  };
+
+  // Open panel: fetch notifications
+  const toggleNotif = () => {
+    if (!showNotif) fetchNotifications();
+    setShowNotif(v => !v);
+  };
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (notifRef.current && !notifRef.current.contains(e.target)) setShowNotif(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Poll unread count every 60 s
+  useEffect(() => {
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 60000);
+    return () => clearInterval(interval);
+  }, [fetchUnreadCount]);
+
   const handleLogout = () => { logout(); navigate('/login'); };
 
-  useEffect(() => {
-    setSidebarOpen(!isMobile);
-  }, [isMobile]);
+  useEffect(() => { setSidebarOpen(!isMobile); }, [isMobile]);
 
-  // Filter nav items based on user role
   const userRole = user?.role || 'viewer';
   const navItems = ALL_NAV.filter(item => item.roles.includes(userRole));
   const roleStyle = ROLE_STYLE[userRole] || ROLE_STYLE.viewer;
+
+  const notifTypeIcon = (type) => {
+    const map = { invoice_overdue: '🧾', compliance_due: '📅', task_overdue: '✅', new_ticket: '🎫', general: '🔔' };
+    return map[type] || '🔔';
+  };
 
   const showSidebarText = isMobile || sidebarOpen;
 
@@ -224,10 +287,94 @@ export default function Layout() {
           )}
           {!isMobile && <div style={{ width: 1, height: 20, background: '#e8e6e0' }} />}
           {!isMobile && <span style={{ fontSize: 13, color: '#555', fontWeight: 500 }}>{user?.name}</span>}
-          <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#666', padding: 6, borderRadius: 6, position: 'relative' }}>
-            <Bell size={18} />
-            <span style={{ position: 'absolute', top: 4, right: 4, width: 8, height: 8, background: '#e24b4a', borderRadius: '50%' }} />
-          </button>
+          {/* ── Notifications Bell ── */}
+          <div ref={notifRef} style={{ position: 'relative' }}>
+            <button onClick={toggleNotif}
+              style={{ border: 'none', background: showNotif ? '#f8f7f4' : 'none', cursor: 'pointer',
+                color: '#555', padding: 7, borderRadius: 8, position: 'relative',
+                display: 'flex', alignItems: 'center', transition: 'background 0.15s' }}>
+              <Bell size={18} />
+              {unreadCount > 0 && (
+                <span style={{
+                  position: 'absolute', top: 2, right: 2,
+                  minWidth: 16, height: 16, borderRadius: 8,
+                  background: '#e24b4a', color: '#fff',
+                  fontSize: 9, fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  padding: '0 3px', lineHeight: 1,
+                }}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </button>
+
+            {/* Dropdown panel */}
+            {showNotif && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+                width: 340, maxHeight: 440,
+                background: '#fff', border: '1px solid #e8e6e0',
+                borderRadius: 14, boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+                zIndex: 9999, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+              }}>
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '14px 16px', borderBottom: '1px solid #f0ede8' }}>
+                  <div>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: '#1a1a18' }}>Notifications</span>
+                    {unreadCount > 0 && (
+                      <span style={{ marginLeft: 8, fontSize: 11, padding: '2px 8px', borderRadius: 10,
+                        background: '#fcebeb', color: '#a32d2d', fontWeight: 600 }}>
+                        {unreadCount} new
+                      </span>
+                    )}
+                  </div>
+                  {unreadCount > 0 && (
+                    <button onClick={markAllRead}
+                      style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#2d9d78',
+                        fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <CheckCheck size={13} /> Mark all read
+                    </button>
+                  )}
+                </div>
+
+                {/* List */}
+                <div style={{ overflowY: 'auto', flex: 1 }}>
+                  {notifLoading ? (
+                    <div style={{ padding: 24, textAlign: 'center', color: '#aaa', fontSize: 13 }}>Loading…</div>
+                  ) : notifications.length === 0 ? (
+                    <div style={{ padding: '32px 16px', textAlign: 'center' }}>
+                      <Bell size={28} style={{ color: '#ddd', display: 'block', margin: '0 auto 10px' }} />
+                      <p style={{ fontSize: 13, color: '#aaa', margin: 0 }}>All caught up! No notifications.</p>
+                    </div>
+                  ) : notifications.map(n => (
+                    <div key={n.id}
+                      onClick={() => !n.is_read && markOneRead(n.id)}
+                      style={{
+                        display: 'flex', gap: 12, padding: '12px 16px',
+                        borderBottom: '1px solid #f8f7f4', cursor: n.is_read ? 'default' : 'pointer',
+                        background: n.is_read ? '#fff' : '#fdf9fc',
+                        transition: 'background 0.15s',
+                      }}>
+                      <div style={{ fontSize: 20, flexShrink: 0, marginTop: 1 }}>{notifTypeIcon(n.type)}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: '0 0 3px', fontSize: 13, fontWeight: n.is_read ? 400 : 600,
+                          color: '#1a1a18', lineHeight: 1.4 }}>
+                          {n.message || n.type?.replace(/_/g, ' ')}
+                        </p>
+                        <p style={{ margin: 0, fontSize: 11, color: '#aaa' }}>
+                          {n.created_at ? new Date(n.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                        </p>
+                      </div>
+                      {!n.is_read && (
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#C70073', flexShrink: 0, marginTop: 5 }} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </header>
 
         {/* Page Content */}

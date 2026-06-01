@@ -57,16 +57,30 @@ function TicketModal({ ticket, clients = [], users = [], onClose, onSave }) {
     if (isReadOnly) return;
     if (!form.subject) return toast.error('Subject is required');
     if (!isClient && !form.client_id) return toast.error('Please select a client');
-    
+
+    // Only send flat DB columns — strip nested join objects (clients, assignee, raised)
+    const payload = {
+      subject:          form.subject,
+      description:      form.description     || null,
+      category:         form.category        || null,
+      priority:         form.priority        || null,
+      status:           form.status          || 'open',
+      client_id:        form.client_id       || null,
+      assigned_to:      form.assigned_to     || null,
+      resolution_notes: form.resolution_notes || null,
+    };
+
     setSaving(true);
     try {
       if (form.id) {
-        await api.patch(`/tickets/${form.id}`, form);
+        await api.patch(`/tickets/${form.id}`, payload);
       } else {
-        await api.post('/tickets', form);
+        await api.post('/tickets', payload);
       }
       onSave();
       onClose();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Failed to save ticket');
     } finally { setSaving(false); }
   };
 

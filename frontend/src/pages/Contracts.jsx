@@ -24,17 +24,27 @@ function ContractModal({ contract, clients, onClose, onSave }) {
   const labelStyle = { display: 'block', fontSize: 12, fontWeight: 500, color: '#555', marginBottom: 5 };
 
   const handleSave = async () => {
-    if (!form.title) return toast.error('Title is required');
+    if (!form.title?.trim()) return toast.error('Title is required');
     if (!form.client_id) return toast.error('Please select a client');
     setSaving(true);
     try {
+      // Only send flat DB columns — strip any joined objects
+      const payload = {
+        title: form.title, client_id: form.client_id,
+        contract_type: form.contract_type, status: form.status,
+        value: form.value || null, start_date: form.start_date || null,
+        end_date: form.end_date || null, file_url: form.file_url || null,
+        notes: form.notes || null,
+      };
       if (form.id) {
-        await api.patch(`/contracts/${form.id}`, form);
+        await api.patch(`/contracts/${form.id}`, payload);
       } else {
-        await api.post('/contracts', form);
+        await api.post('/contracts', payload);
       }
       onSave();
       onClose();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Failed to save contract');
     } finally { setSaving(false); }
   };
 
@@ -122,9 +132,13 @@ export default function Contracts() {
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this contract?')) return;
-    await api.delete(`/contracts/${id}`);
-    toast.success('Contract deleted');
-    fetchAll();
+    try {
+      await api.delete(`/contracts/${id}`);
+      toast.success('Contract deleted');
+      fetchAll();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Failed to delete contract');
+    }
   };
 
   const fmt = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');

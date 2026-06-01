@@ -69,6 +69,7 @@ CREATE TABLE clients (
   country VARCHAR(80) DEFAULT 'India',
   website VARCHAR(200),
   status VARCHAR(30) DEFAULT 'active',       -- active, inactive, churned
+  is_offboard BOOLEAN DEFAULT FALSE,         -- TRUE = created inline during invoice, not formally onboarded
   account_manager_id UUID REFERENCES users(id),
   onboarded_on DATE DEFAULT CURRENT_DATE,
   created_at TIMESTAMPTZ DEFAULT NOW(),

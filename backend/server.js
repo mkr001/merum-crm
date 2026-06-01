@@ -21,8 +21,26 @@ app.use(express.urlencoded({ extended: true }));
 const path = require('path');
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200 });
+// Global limiter
+const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
 app.use('/api/', limiter);
+
+// Strict limiter for auth (brute-force protection)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 10,
+  message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
+  standardHeaders: true, legacyHeaders: false,
+});
+app.use('/api/auth/login', authLimiter);
+
+// Heavy-operation limiter for bulk endpoints
+const bulkLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, max: 20,
+  message: { error: 'Too many bulk requests. Please wait before trying again.' },
+  standardHeaders: true, legacyHeaders: false,
+});
+app.use('/api/invoices/bulk', bulkLimiter);
+app.use('/api/clients/bulk',  bulkLimiter);
 
 // ─── Routes ───────────────────────────────────────────────
 app.use('/api/auth',        require('./routes/auth'));
@@ -40,7 +58,8 @@ app.use('/api/users',       require('./routes/users'));
 app.use('/api/activity',    require('./routes/activity'));
 app.use('/api/tickets',     require('./routes/tickets'));
 app.use('/api/contracts',   require('./routes/contracts'));
-app.use('/api/onboarding',  require('./routes/onboarding'));
+app.use('/api/onboarding',     require('./routes/onboarding'));
+app.use('/api/notifications',  require('./routes/notifications'));
 
 // ─── Health Check ──────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date() }));

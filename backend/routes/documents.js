@@ -9,16 +9,36 @@ const crypto = require('crypto');
 const router = express.Router();
 router.use(authenticate);
 
-// Configure Multer for local storage
+// Allowed MIME types and extensions
+const ALLOWED_MIME = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'image/jpeg', 'image/png', 'image/webp',
+  'text/csv',
+]);
+const ALLOWED_EXT = new Set(['.pdf','.doc','.docx','.xls','.xlsx','.jpg','.jpeg','.png','.webp','.csv']);
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
+const fileFilter = (req, file, cb) => {
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (!ALLOWED_MIME.has(file.mimetype) || !ALLOWED_EXT.has(ext)) {
+    return cb(new Error(`File type not allowed. Accepted: PDF, Word, Excel, JPG, PNG, CSV`));
+  }
+  cb(null, true);
+};
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads/')),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const name = crypto.randomBytes(8).toString('hex') + ext;
+    const ext = path.extname(file.originalname).toLowerCase();
+    const name = crypto.randomBytes(12).toString('hex') + ext;
     cb(null, name);
   }
 });
-const upload = multer({ storage });
+const upload = multer({ storage, fileFilter, limits: { fileSize: MAX_FILE_SIZE } });
 
 router.get('/', async (req, res) => { 
   let { client_id } = req.query;

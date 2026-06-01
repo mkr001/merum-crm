@@ -9,18 +9,20 @@ const router = express.Router();
 router.use(authenticate);
 
 router.get('/', asyncHandler(async (req, res) => {
-  const { status, page = 1, limit = 50 } = req.query;
-  
+  const { status, is_offboard, page = 1, limit = 50 } = req.query;
+
   // 1. Fetch clients with account manager name
   let q = supabase.from('clients').select(`
     *,
     users!clients_account_manager_id_fkey(full_name)
   `, { count: 'exact' });
 
-  if (status) {
+  if (is_offboard === 'true') {
+    q = q.eq('is_offboard', true).neq('status', 'deleted');
+  } else if (status) {
     q = q.eq('status', status);
   } else {
-    q = q.neq('status', 'deleted');
+    q = q.neq('status', 'deleted').eq('is_offboard', false);
   }
 
   const from = (page - 1) * limit;
@@ -109,6 +111,15 @@ router.post('/', authorize('admin', 'manager'), validate(clientCreateSchema), as
 
 router.patch('/:id', authorize('admin', 'manager', 'accountant'), validate(clientUpdateSchema), asyncHandler(async (req, res) => {
   const { data, error } = await supabase.from('clients').update({ ...req.validatedBody, updated_at: new Date() }).eq('id', req.params.id).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+}));
+
+// Onboard an offboard client — clears is_offboard flag
+router.patch('/:id/onboard', authorize('admin', 'manager', 'accountant'), asyncHandler(async (req, res) => {
+  const { data, error } = await supabase.from('clients')
+    .update({ is_offboard: false, updated_at: new Date() })
+    .eq('id', req.params.id).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 }));

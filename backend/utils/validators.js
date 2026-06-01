@@ -71,7 +71,13 @@ const clientUpdateSchema = clientCreateSchema.fork(
 
 // ── Invoices ────────────────────────────────────────────────────
 const invoiceCreateSchema = Joi.object({
-  client_id: uuid.required(),
+  client_id: uuid.optional().allow('', null),
+  new_client_name: Joi.string().max(200).allow('', null), // used when client is not onboarded
+  new_client_gstin: optionalString(20),
+  new_client_address: optionalString(500),
+  new_client_city: optionalString(80),
+  new_client_state: optionalString(80),
+  new_client_pincode: optionalString(10),
   issue_date: optionalDate,
   due_date: optionalDate,
   status: Joi.string().valid('draft', 'sent', 'paid', 'overdue', 'cancelled').allow('', null),
@@ -85,7 +91,7 @@ const invoiceCreateSchema = Joi.object({
     quantity: Joi.number().min(0).default(1),
     unit_price: Joi.number().precision(2).min(0).required()
   })).default([])
-}).options({ stripUnknown: true });
+}).or('client_id', 'new_client_name').options({ stripUnknown: true });
 
 // ── Contracts ───────────────────────────────────────────────────
 const contractCreateSchema = Joi.object({

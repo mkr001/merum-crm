@@ -18,6 +18,20 @@ const STANDARD_ONBOARDING_TASKS = [
  * @param {string[]} interestServices - Array of service names from the lead.
  */
 async function initializeOnboarding(clientId, userId, interestServices = []) {
+  const sevenDaysLater = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const tasksToInsert = STANDARD_ONBOARDING_TASKS.map(task => ({
+    title: task.title,
+    description: task.description,
+    priority: task.priority,
+    task_type: 'onboarding',
+    related_to: 'client',
+    related_id: clientId,
+    assigned_to: userId,
+    status: 'pending',
+    due_date: sevenDaysLater,
+  }));
+
   const { error: taskErr } = await supabase.from('tasks').insert(tasksToInsert);
   if (taskErr) throw new Error(`Failed to create onboarding tasks: ${taskErr.message}`);
 

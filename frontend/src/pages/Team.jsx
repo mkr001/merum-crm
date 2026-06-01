@@ -180,7 +180,9 @@ export default function Team() {
       await api.patch(`/users/${u.id}/deactivate`);
       toast.success(`${u.full_name} has been deactivated`);
       fetchUsers();
-    } catch {}
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Failed to deactivate user.');
+    }
   };
 
   const activeUsers   = users.filter(u => u.is_active);
@@ -215,7 +217,22 @@ export default function Team() {
 
       {/* Active Users Grid */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 60, color: '#aaa' }}>Loading team…</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+          <style>{`@keyframes sk-team{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} style={{ background: '#fff', border: '1px solid #e8e6e0', borderRadius: 12, padding: '18px 20px' }}>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+                <div style={{ width: 42, height: 42, borderRadius: '50%', background: 'linear-gradient(90deg,#f0ede8 25%,#e8e4de 50%,#f0ede8 75%)', backgroundSize: '200% 100%', animation: 'sk-team 1.4s infinite', flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ height: 14, width: '65%', background: 'linear-gradient(90deg,#f0ede8 25%,#e8e4de 50%,#f0ede8 75%)', backgroundSize: '200% 100%', animation: 'sk-team 1.4s infinite', borderRadius: 6, marginBottom: 8 }} />
+                  <div style={{ height: 18, width: '40%', background: 'linear-gradient(90deg,#f0ede8 25%,#e8e4de 50%,#f0ede8 75%)', backgroundSize: '200% 100%', animation: 'sk-team 1.4s infinite', borderRadius: 10 }} />
+                </div>
+              </div>
+              <div style={{ height: 12, width: '80%', background: 'linear-gradient(90deg,#f0ede8 25%,#e8e4de 50%,#f0ede8 75%)', backgroundSize: '200% 100%', animation: 'sk-team 1.4s infinite', borderRadius: 6, marginBottom: 8 }} />
+              <div style={{ height: 12, width: '55%', background: 'linear-gradient(90deg,#f0ede8 25%,#e8e4de 50%,#f0ede8 75%)', backgroundSize: '200% 100%', animation: 'sk-team 1.4s infinite', borderRadius: 6 }} />
+            </div>
+          ))}
+        </div>
       ) : (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
